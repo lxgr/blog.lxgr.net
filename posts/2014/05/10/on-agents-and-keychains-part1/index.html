@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>On agents and keychains (Part 1)</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/" rel="bookmark"
+           title="Permalink to On agents and keychains (Part 1)">On agents and keychains (Part 1)</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-10T14:22:00+02:00">
+                Published: Sat 10 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->      <p>Many people, myself included, use tools like ssh-agent or gpg-agent to protect their private keys from theft without sacrificing the convenience of password-less logins. Presumably even more people use some kind of password manager, whether that is the one included with their operating system or a third-party one. I've been using both for a long time, but only recently started to wonder about their internals: What is the threat model here, and how do those tools provide the necessary protection? This will be a series of posts on the subject; in this one, I will try to examine the necessity of such programs, and the way process separation is implemented in various operating systems.</p>
+<h1>Part 1: The need for application isolation</h1>
+<h2>Isolate what?</h2>
+<p>Before looking at the tools in question, we have to look at the environment in which they are being used.
+The various Unix operating systems have historically focused their security efforts on separating the actions of multiple users on a single system – i.e., Alice is not supposed to be able to read Bob's mail. Processes usually run with a user's permissions and are free to read and modify files in their home directory, as well as communicate with each other almost without restrictions (more on that later).</p>
+<p>This model does not distinguish between a user and the programs he is using. Whether a user runs a simple unix command like <code>mv</code> or a complex application like a web browser, the operating sytem kernel assumes that all the system calls by the user's processes are identical with the user's intentions.</p>
+<p>While this assumption is still reasonable if all of the binaries our user might run are provided by the same people who provide their operating system, things start to get interesting once users bring their own software, whether voluntarily or accidentially (in the form of malware received through whatever vector).</p>
+<p>Once the user runs any piece of "evil" code, they lose. The operating system will still isolate their requests from other users on the system, but that might be little consolation for the case of a typical desktop user – more often than not, they are the only user on their system (at least as far as Unix permissions are concerned), and a malicios application running with their permissions amounts to a full system compromise.</p>
+<p>At a first glance, it seems to be impossible for an user of such a system to protect some piece of information against their own processes, but still, the existance of password managers that use anything but a plain-text unencrypted database seems to indicate that at least their vendors think (or try to convince their customers to think) otherwise.</p>
+<h2>A different model</h2>
+<p>Before looking at the tools in question, I think it is interesting to examine some other ways of application privilege separation.</p>
+<p>While most desktop systems essentially still operate under the same security paradigms, the situation is very different for the mobile operating systems. (Presumably) inspired by the situation of malware on the most common desktop operating systems, their creators have realized that in order to unleash an enormous whealth of third-party applications on their users by design, a more strict separation of privileges is in order.</p>
+<p>Android has implemented application separation in a simple, yet very effective way: Every Android app has a unique Unix user account. This way, by default all application data is implicitly private. In order to use anything but their own data, applications have to use Android's library functions that will moderate access to system functions and potentially sensitive data. (Permissions to use those library functions are granted at the time an application is installed in an all-or-nothing fashion, but that is a design decision that could be modified to a more fine-grained model pretty easily.)</p>
+<p>Apple's iOS uses a more traditional approach with regards to UIDs - all applications are running as the user <code>mobile</code>. Sandboxing is instead explicitly implemented in the kernel, which restricts each application's system calls to a secure subset. Basically, reads and writes to anything but a list of allowed files and directories and other security-critical system calls will fail. Some exceptions to this can be granted by the user at run-time (e.g. access to the address book or location based services).</p>
+<h2>Apps on the desktop?</h2>
+<p>Can such a security model be brought to the desktop without breaking almost any existing application? It seems that at least Apple thinks that this is the way to go. While it is still possible to run unrestricted applications on OS X, there is now also a sandboxing mechanism in place that allows a developer to whitelist the set of allowed system calls just like on iOS. This will presumably become a mandatory feature of new applications submitted to the Apple-curated Mac app store. Microsoft seems to be trying to do something similar with their Windows Store.</p>
+<p>While this might solve the problem of application isolation, there are a lot of legacy applications that will probably be never ported to such a restrictive environment, and the third popular desktop operating system, Linux, does not provide such a sandboxed app-store model for obvious reasons.</p>
+<p>Still, there are password managers and private key agents for all three major platforms – (how) do they work? This will be the topic for the following articles.</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2014/05/10/on-agents-and-keychains-part1/';
+        var disqus_url = '//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>Thoughts on a cloud-based password synchronization service</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/10/24/thoughts-on-cloud-password-sync/" rel="bookmark"
+           title="Permalink to Thoughts on a cloud-based password synchronization service">Thoughts on a cloud-based password synchronization service</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-10-24T16:15:00+02:00">
+                Published: Thu 24 October 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->      <p>Today, Apple has enabled its cloud-based password synchronization service, iCloud Keychain. The service promises to safely store and synchronize passwords and other sensitive user data like credit card numbers among multiple devices. Apple claims that the information is protected with AES, but that alone is meaningless without knowing where that key is actually stored.</p>
+<p>As usual, there is not much public documentation, but there is a <a href="http://support.apple.com/kb/HT5813?viewlocale=en_US">support document</a> that contains some interesting propositions:</p>
+<ul>
+<li>Adding a new device to an iCloud-synchronized Keychain displays a message on a previously registered device to accept or deny that new device. </li>
+<li>When enabling Keychain sync, the user is given an option to create a backup code.</li>
+<li>With the backup code, it's possible to recover the Keychain contents without the original device; without the code, (supposedly) not even Apple can access the contents.</li>
+<li>The number of times a user can enter the security code is limited; Apple support can extend the limit, but eventually, the Keychain data will be deleted from the server.</li>
+</ul>
+<p>Starting from those propositions alone, I was wondering how it might be possible to implement a password storage and synchronization service that has all those properties. Is there a way to enable such a service without simply storing the AES key on the servers, and using the user password to retrieve it together with the data? The following is based on speculation alone; I haven't done any reverse engineering on the actual Keychain software or protocol.</p>
+<p>The first statement about adding a new device sounds like there is some kind of key exchange going on, which the user can allow or deny. The new device could present a public key to the original device, and the old device could then encrypt the AES key with that public key. (Every iOS device already has at least one RSA key in the form of a certificate signed by Apple's certificate authority.) Without any kind of fingerprint verification, there is no way to verify that the public key actually belongs to the new device and not to some third party, though. </p>
+<p>Disregarding any possible MITM attacks on the key exchange, this way of adding new devices could be used to safely share the password database and its encryption key among many devices. The shared key can also be used for efficient synchronization of future modifications to the database.</p>
+<p>The second and third statements about the backup code sounds like a way to store a copy of the database encryption key on the server, which might be wrapped with yet another key derived from the backup code. The default strength of the backup code is only a four-digit number, which even when used with PBKDF2 with many iterations is barely more secure than plaintext, but it can be changed to a more secure alphanumeric password. When using a reasonably secure passphrase, this makes it impossible for the service provider to access the database contents.</p>
+<p>The fourth claim about a limit to the number of attempts to enter the backup code could be implemented with a secure hash function. When the backup code is first created, it is not only used as an input to a key derivation function which is then used to wrap the database encryption key before it is sent to the server, but also hashed (optionally with a salt and a number of iterations). The resulting hash is also transmitted to the server together with the wrapped backup key.</p>
+<p>When the user later initiates a database restore, the server first transmits the salt (if there is one) to the client. The user then enters the backup code on the device, where it is hashed with the salt, and transmitted back to the server. Only when the response to that challenge is identical to the response stored on the server, the actual database will be sent to the client in its encrypted form. This way, the number of backup code attempts per second can be rate-limited on the server side.</p>
+<p>This would make it possible to prevent brute-force attacks on a weak backup code for other clients. Of course, it doesn't help against an untrustworthy service provider, who will be able to brute-force the encryption key without any limitation, since he necessarily holds the backup copy of the database and its wrapped encryption key.</p>
+<p>I would be very interested in a detailed protocol analysis of Apple's solution, like the one that was recently published about the iMessage protocol. Using an architecture like the one lined out above would put Apple in a similar position as for iMessage with regards to lawful interception: While government access would be possible via a MITM-attack on the device setup procedure, it wouldn't be as simple as demanding the user database and the according encryption key. Everything else would more or less invalidate the unambiguous statement (as quoted from the <a href="http://support.apple.com/kb/HT5813?viewlocale=en_US">support page for iCloud Keychain</a>) regarding Apple's capabilities: "If you choose to not create an iCloud Security Code, Apple will not be able to recover your iCloud Keychain."</p>
+<p>Of course, if a user choses to use a four-digit numeric backup code (which is the proposed default by the setup wizard), the details of the implementation are rendered moot: There is no way such a weak password can provide any security against brute force attacks using any practical combination of hash function and iteration count. (This is probably also the reason why the service implements a rate-limiting feature for recovery access.) It would have been in the interest of Apple's user base to provide a strong, randomly generated alphanumeric string as a backup code by default, <a href="https://support.mozilla.org/en-US/kb/firefox-sync-data-secure-find-out-more">like Mozilla does</a> for their bookmark synchronization service.</p>
+<p><strong>Update (2013-10-30):</strong>
+Ars Technica has published an <a href="http://arstechnica.com/information-technology/2013/10/apple-claim-that-icloud-can-store-passwords-only-locally-seems-to-be-false/">interesting article</a> on the topic, with similar conclusions. They claim that there is a different recovery process depending on whether a four-digit security code or an actual high-entropy password is used, which is somewhat strange (if there is really no server-side brute-force protection for alphanumeric passwords, a four-digit passcode could actually provide better protection than a five-character alphanumeric password). Using a high-entropy password seems like the better choice in any case.</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/10/24/thoughts-on-cloud-password-sync/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/10/24/thoughts-on-cloud-password-sync/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

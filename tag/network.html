@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - network</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/11/18/nsswitch-ubuntu-slow-dns-lookups/">How to fix slow DNS lookups on Ubuntu</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-11-18T22:03:00+01:00">
+                Published: Mon 18 November 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/dns.html">dns</a> </p>
+</footer><!-- /.post-info --><p>If you're using a relatively recent version of Ubuntu, chances are that you have encountered spurious slowdowns that might be related to a very specific DNS failure. For me, it was the fact that <code>ping</code> to a host <em>without</em> a reverse DNS entry would only transmit a single ICMP request per second, even when a higher rate was specified via the <code>-i</code> option.</p>
+<p>I've traced the DNS requests that are performed by <code>ping</code> by default (the effect does not occur when using the <code>-n</code> option which disables host name lookup), and didn't notice anything out of the ordinary. The <code>NXDOMAIN</code> responses were occuring almost instantly, but nevertheless, it took precisely one second for this response to actually propagate to the <code>ping</code> process.</p>
+<p>To make a long story short: The reson for this is that Ubuntu (or more precisely, the Name Switching Service), will (by default) try to lookup DNS records not only via the regular DNS server configured via the network settings, but also using Zeroconf (a.k.a. Bonjour); a protocol that can be used to resolve hostnames locally by using multicast DNS requests and responses.</p>
+<p>This is not an issue for DNS queries that can be answered positively by your regular DNS server (those will always take precedence over records received via Zeroconf), but it can be a problem for negative DNS responses (<code>NXDOMAIN</code>): When the resolving library receives one of those, it will try a Zeroconf lookup, and this can take a while – especially for a host that does not exist.</p>
+<p>Since Zeroconf is only rarely used on Linux and is almost always limited to the <code>.local</code> top-level domain, this behavior seems useless at best, and can be pretty irritating.</p>
+<p>To fix it, you can simply disable the Zeroconf DNS lookups in the configuration file <a href="http://man7.org/linux/man-pages/man5/nsswitch.conf.5.html"><code>/etc/nsswitch.conf</code></a> by changing the line</p>
+<div class="highlight"><pre><span class="n">hosts</span><span class="o">:</span>          <span class="n">files</span> <span class="n">myhostname</span> <span class="n">mdns4_minimal</span> <span class="o">[</span><span class="n">NOTFOUND</span><span class="o">=</span><span class="k">return</span><span class="o">]</span> <span class="n">dns</span> <span class="n">mdns4</span>
+</pre></div>
+
+
+<p>to</p>
+<div class="highlight"><pre><span class="n">hosts</span><span class="o">:</span>          <span class="n">files</span> <span class="n">myhostname</span> <span class="n">mdns4_minimal</span> <span class="o">[</span><span class="n">NOTFOUND</span><span class="o">=</span><span class="k">return</span><span class="o">]</span> <span class="n">dns</span>
+</pre></div>
+
+
+<p>This doesn't entirely disable Zeroconf – it only restricts the lookups to the <code>.local</code> domain, which is almost always the only place where they are useful anyway.</p>
+<p>The effects should be immediately noticeable – just try to ping one of the previously slow to respond hosts and check if the ICMP requests are still limited to one per second.</p>
+<p>If you think that this should be the default configuration for Ubuntu, you are not alone – there <a href="https://bugs.launchpad.net/ubuntu/+source/nss-mdns/+bug/94940">is a bug report</a> on Ubuntu's bug tracker that describes the problem, but since it's been known since 2007, I wouldn't bet on the default changing anytime soon.</p><p>There are <a href="//blog.lxgr.net/posts/2013/11/18/nsswitch-ubuntu-slow-dns-lookups/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+                <section id="content" class="body">
+                    <h1>Other articles</h1>
+                    <hr />
+                    <ol id="posts-list" class="hfeed">
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/04/12/jumboframes-on-the-internet/" rel="bookmark"
+                           title="Permalink to Jumboframes on the Internet?">Jumboframes on the Internet?</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-04-12T11:43:00+02:00">
+                Published: Fri 12 April 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> </p>
+</footer><!-- /.post-info -->                <p>Recently, I've been experimenting with Wireshark for my bachelor's thesis, monitoring the performance of TCP uploads from my notebook to my web server. A while ago, I had also swapped my router for a nicer model capable of gigabit ethernet and 5 GHz wifi (due to increasing congestion ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/04/12/jumboframes-on-the-internet/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/04/12/jumboframes-on-the-internet/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/03/29/vpn-ipv6-part2/" rel="bookmark"
+                           title="Permalink to VPNs and IPv6, part 2">VPNs and IPv6, part 2</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-29T17:28:00+01:00">
+                Published: Fri 29 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/vpn.html">vpn</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>As I've <a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/">written before</a>, VPNs can lead to insecure situations when used with IPv6 enabled networks.</p>
+<p>The easiest way to mitigate that problem is actually just to enable IPv6 tunneling over the VPN itself, provided your VPN gateway has IPv6 connectivity and you have a spare /64 subnet you ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/03/29/vpn-ipv6-part2/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/03/29/vpn-ipv6-part2/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/03/08/server-move-graz-vienna/" rel="bookmark"
+                           title="Permalink to Server relocation">Server relocation</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-08T11:46:00+01:00">
+                Published: Fri 08 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/hosting.html">hosting</a> <a href="//blog.lxgr.net/tag/network.html">network</a> </p>
+</footer><!-- /.post-info -->                <p>This weekend, the server on which this blog is hosted will be <a href="http://www.edis.at/de/support-und-service/blog/edis-zieht-um-nach-wien/">moved from Graz to Vienna</a>. If all goes well, there will be a short outage on Saturday evening/night, and much better connectivity afterwards.</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/03/08/server-move-graz-vienna/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/03/08/server-move-graz-vienna/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/" rel="bookmark"
+                           title="Permalink to VPNs and IPv6">VPNs and IPv6</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-06T10:31:00+01:00">
+                Published: Wed 06 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/vpn.html">vpn</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <!--- Summary: Inadverted VPN circumvention by IPv6 -->
+
+<p>A while ago, I have configured a small OpenVPN for personal use (mostly for security when using public wireless networks) with <a href="http://openvpn.net/">OpenVPN</a>. The setup is pretty easy, thanks to a <a href="http://wiki.openvpn.eu/index.php/Konfiguration_eines_Internetgateways">very helpful tutorial (in German)</a> and the sensible default settings of OpenVPN itself. (Setting up the certificate infrastructure was a ...</p></!--->
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/01/28/my-openwrt-setup/" rel="bookmark"
+                           title="Permalink to My OpenWrt setup">My OpenWrt setup</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-01-28T12:15:00+01:00">
+                Published: Mon 28 January 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/openwrt.html">openwrt</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> </p>
+</footer><!-- /.post-info -->                <!--- Summary: My OpenWrt configuration -->
+
+<p>This weekend, I finally reinstalled <a href="https://openwrt.org/">OpenWrt</a> on my home router. I've been using a nightly build for several months now, and it had been working just fine, but unfortunately, the opkg (OpenWrt's package manager) repositories for the nightly builds are updated every few days, and all of the ...</p></!--->
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/01/28/my-openwrt-setup/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/01/28/my-openwrt-setup/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+                </ol><!-- /#posts-list -->
+                </section><!-- /#content -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>On Linux and random numbers</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/drafts/linux-random-numbers.html" rel="bookmark"
+           title="Permalink to On Linux and random numbers">On Linux and random numbers</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-09-19T12:49:00+02:00">
+                Published: Thu 19 September 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/rng.html">rng</a> </p>
+</footer><!-- /.post-info -->      <p>Because of the recent revelations on the NSA's purported intentional weakening of cryptographic standards and/or implementations, a lot of attention has come to various hardware and software (pseudo)random number generators.</p>
+<p>The reason that a backdoor in a RNG would be so devastating is that they are the foundation for almost all cryptography. Symmetric and asymmetric encryption as well as signatures and authentication all require some degree of trustable randomness as an input. If that randomness turns out to be not as random (e.g. the output numbers are predictable, repeated after a system/application restart, or just constants), you have a problem. I'll just point you to an excellent post on the topic by Matthew Green, who explains the impact of a broken RNG on various cryptographic schemes. To sum it up, if you manage to regenerate somebody's RNG output, you can also regenerate their (future) private and symmetric encryption keys.</p>
+<p>I've written about unintentionally broken PRNGs before: Building a robust implementation of a PRNG seems to be hard, and mistakes happen (and are hopefully fixed). But what about the possibility of a deliberate, structural weakness?</p>
+<p>The current discussion seems to revolve around two very different PRNGs: The Intel Bull Mountain hardware RNG, which is included as a special instruction in recent PC CPUs (Ivy Bridge series and later), and the software algorithm Dual EC DRBG, which was approved by NIST for governmental use in the United States.</p>
+<p>For the software algorithm, there is actually not much left to say: Many cryptographers have raised an eyebrow at the thinly-veiled possibility for a "private key" to the algorithm. This key would correspond to the public constants of the RNG and would allow anybody who knows it to regenerate the internal state of the PRNG just from a few output bytes, and thereby all future outputs of that particular PRNG instance as well. Again, Matthew Green explains it very well in a detailed, yet (almost) non-mathematical post; head over there if you're interested in the details.</p>
+<p>Even if the public constants of Dual EC DRBG </p>
+    </div><!-- /.entry-content -->
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - openwrt</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/01/28/my-openwrt-setup/">My OpenWrt setup</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-01-28T12:15:00+01:00">
+                Published: Mon 28 January 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/openwrt.html">openwrt</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> </p>
+</footer><!-- /.post-info --><!--- Summary: My OpenWrt configuration -->
+
+<p>This weekend, I finally reinstalled <a href="https://openwrt.org/">OpenWrt</a> on my home router. I've been using a nightly build for several months now, and it had been working just fine, but unfortunately, the opkg (OpenWrt's package manager) repositories for the nightly builds are updated every few days, and all of the kernel modules have hard dependencies on a specific kernel version. So in order to install a new kernel module, I would have to upgrade my OpenWrt version every time – not very convenient.</p>
+<p>Luckily, there is a release candidate for the newest version, called "Attitude Adjustment", which is what I upgraded to. This went without any major problems and I was even able to keep my configuration, but I had to reinstall all packages not included by default. At this opportunity, I decided to document my configuration and installed packages.</p>
+<h1>Avoiding Bufferbloat</h1>
+<p><a href="http://www.bufferbloat.net/">Bufferbloat</a> is a nasty phenomenon that occurs mostly on residential internet connections. In a nutshell, hugely oversized buffers combined with static queue management in cable and DSL modems cause huge delays during large uploads, which can lead to a very bad experience for interactive applications. I use a SIP phone to make voice calls, and previously to my solution, it was nearly impossible to make a phone call at the same time as somebody uploading pictures or videos on the same network – now it works just fine.</p>
+<p>The solution to Bufferbloat is two-fold: First, the available bandwidth has to be limited on the router to just below the bandwith actually available to the modem, in order to avoid any buffering in the modem. Then, some adaptive or even "fair" queueing algorithm like <a href="http://queue.acm.org/detail.cfm?id=2209336">CoDel</a> can be used. Both tasks can be achieved via the Linux packet scheduler and its managment tool, <code>tc</code>. Both are available as OpenWrt packages:</p>
+<div class="highlight"><pre>opkg install tc kmod-sched
+</pre></div>
+
+
+<p>uci, OpenWrt's configuration system, doesn't support custom packet schedulers yet, so my setup script is implemented as a shell script that is executed once at every boot of the router.</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23</pre></div></td><td class="code"><div class="highlight"><pre><span class="c">#!/bin/sh</span>
+
+<span class="c"># Insert the necessary kernel modules</span>
+insmod sch_htb
+insmod sch_fq_codel
+
+<span class="c"># Reset the queueing disciplines</span>
+tc qdisc del dev eth1 root
+tc qdisc del dev br-lan root
+
+<span class="c"># Add a HTB queue to the internal interface (to limit upload speeds)</span>
+tc qdisc add dev eth1 root handle 1: htb default 1
+<span class="c"># Limit the upload speed to 2048 kbit/s (adjust this to just below your actual upload speed!)</span>
+tc class add dev eth1 parent 1: classid 1:1 htb rate 2048kbit
+<span class="c"># Enable CoDel as a queueing algorithm for the queue</span>
+tc qdisc add dev eth1 parent 1:1 handle 11: fq_codel
+
+<span class="c"># The same for download speeds - adjust accordingly</span>
+tc qdisc add dev br-lan root handle 1: htb default 1
+tc class add dev br-lan parent 1: classid 1:1 htb rate 32768kbit
+tc qdisc add dev br-lan parent 1:1 handle 11: fq_codel
+
+<span class="nb">exit </span>0
+</pre></div>
+</td></tr></table>
+
+<p>This solved the Bufferbloat issue completely for me, but if it works for you depends on a lot of factors - test the script before enabling it at every boot.</p>
+<h1>IPv6 connectivity via an HE 6in4 tunnel</h1>
+<p>OpenWrt works with IPv6 out of the box. If your provider isn't supplying you with native v6 connectivity yet (which is unfortunately still very likely), you can use a <a href="http://www.tunnelbroker.net">free tunnel</a> provided by <a href="http://he.net">Hurricane Electric</a>. The registration process is pretty straightforward, and HE even provide configuration samples for many routers and operating systems. The one for OpenWrt didn't work for me (which was probably my fault, so you should give it a try!), but this one does:</p>
+<p>First, the 6in4 tunneling module has to be installed:</p>
+<div class="highlight"><pre>opkg install 6in4
+</pre></div>
+
+
+<p>Then, the tunnel interface can be configured in <code>/etc/config/network</code>.</p>
+<p>For the local network, an IPv6 address has to be configured for the router. It can be any address in one of the "Routed IPv6 Prefixed" shown in the tunnel details on tunnelbroker.net, so if you were assigned the prefix <code>2001:470:1b:1234::/64</code>, you could choose <code>2001:470:1b:1234::1/64</code>.</p>
+<div class="highlight"><pre>config interface &#39;lan&#39;
+    option ifname &#39;eth0&#39;
+    option type &#39;bridge&#39;
+    option proto &#39;static&#39;
+    option ipaddr &#39;192.168.1.1&#39;
+    option netmask &#39;255.255.255.0&#39;
+    # 
+    option ip6addr &#39;2001:470:1b:1234:1/48&#39;
+</pre></div>
+
+
+<p>The 6in4 tunnel interface has to be configured like this (assuming your "Client IPv6 address" is <code>2001:470:1a:1234::2</code>, your "Server IPv4 address" is <code>1.2.3.4</code>, and your "Tunnel ID" is <code>12345</code>):</p>
+<div class="highlight"><pre>config interface &#39;henet&#39;
+    option proto &#39;6in4&#39;
+    option peeraddr &#39;1.2.3.4&#39;
+    option ip6addr &#39;2001:470:1a:1234::2/64&#39;
+    option tunnelid &#39;12345&#39;
+    option username &#39;your.username&#39;
+    option password &#39;yourpassword&#39;
+</pre></div>
+
+
+<p>Username and password are <em>not</em> identical to your HE login credentials – they can be retrieved on the "Example Configurations" tab on the "Tunnel Details" page.</p>
+<p>To configure the firewall, you can exceuted the command provided by HE (<code>uci set firewall.@zone[1].network='wan henet'</code>), or manually insert the line <code>option network 'wan henet'</code> to the <code>wan</code> block in the file <code>/etc/config/firewall</code>.</p>
+<p>If you want to use one of IPv6's nicest features, stateless autoconfiguration, <code>radvd</code> has to be installed...</p>
+<div class="highlight"><pre>opkg install radvd
+</pre></div>
+
+
+<p>...and configured like this (in <code>/etc/config/radvd</code>):</p>
+<div class="highlight"><pre>config interface
+    option interface        &#39;lan&#39;
+    option AdvSendAdvert    1
+    option AdvManagedFlag   0
+    option AdvOtherConfigFlag 0
+    list client             &#39;&#39;
+    option ignore           0
+
+config prefix
+    option interface        &#39;lan&#39;
+    list prefix             &#39;2001:470:1b:1234::/64&#39;
+    option AdvOnLink        1
+    option AdvAutonomous    1
+    option AdvRouterAddr    0
+    option ignore           0
+</pre></div>
+
+
+<h1>Dynamic DNS</h1>
+<p>OpenWrt has built-in support for many dynamic DNS services, and the <a href="http://wiki.openwrt.org/doc/howto/ddns.client">documentation on their wiki</a> has all you need to configure it.</p>
+<h1>Port forwarding</h1>
+<p>Specific ports of devices behind the OpenWrt NAT can be made reachable by a block like this in <code>/etc/config/firewall</code>:</p>
+<div class="highlight"><pre>config &#39;redirect&#39;
+    option &#39;name&#39; &#39;myhomeserver&#39;
+    option &#39;src&#39; &#39;wan&#39;
+    option &#39;proto&#39; &#39;tcp&#39;
+    option &#39;src_dport&#39; &#39;22&#39;
+    option &#39;dest_ip&#39; &#39;192.168.1.123&#39;
+    option &#39;dest_port&#39; &#39;22&#39;
+    option &#39;target&#39; &#39;DNAT&#39;
+    option &#39;dest&#39; &#39;lan&#39;
+</pre></div>
+
+
+<h1>Port mirroring with iptables</h1>
+<p>My main motivation for upgrading to the release candidate was actually an iptables module called <code>tee</code>. It can be used to duplicate all or a subset of all packets going throuth the router and transmit them to some other host running a packet analyzer like Wireshark. This can be very useful to debug embedded wireless devices without having to resort to a Wifi card running as a packet sniffer, which was my previous approach.</p>
+<p>In order for the following command to work, the <code>tee</code> module has to be installed on the router. For some reason, <code>ip6tables</code> is also required, or loading the module will fail:</p>
+<div class="highlight"><pre>opkg install iptables-mod-tee ip6tables
+</pre></div>
+
+
+<p>To forward all traffic going through the router to a machine in the private network at 192.168.1.123, simply exceute this command in a shell:</p>
+<div class="highlight"><pre>iptables -A POSTROUTING -t mangle -j TEE --gateway 192.168.1.123
+</pre></div>
+
+
+<p>The forwarded packets will still show the internal IP addresses, which makes finding a specific device much easier.</p>
+<h1>To be continued</h1>
+<p>That's my configuration for now – I hope to be able to update this blog regularly if I find some improvements to my setup.</p><p>There are <a href="//blog.lxgr.net/posts/2013/01/28/my-openwrt-setup/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

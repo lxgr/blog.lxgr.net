@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>Graphics processing in hardware and software</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/05/10/graphics-processing-hardware-software/" rel="bookmark"
+           title="Permalink to Graphics processing in hardware and software">Graphics processing in hardware and software</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-05-10T20:23:00+02:00">
+                Published: Fri 10 May 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/gpu.html">gpu</a> <a href="//blog.lxgr.net/tag/hardware.html">hardware</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/drivers.html">drivers</a> </p>
+</footer><!-- /.post-info -->      <p>I've got a peculiar hobby: I like to worry about very specific implementation details of technologies I don't really understand at all; one of them being GPUs and graphics drivers.</p>
+<p>On one hand, it's really simple: In almost every computing device, there is a GPU. This is basically a programmable, special-purpose, massively parallel CPU, and until recently, its only purpose was drawing triangles in different colors; and not just one or two, but lots of them – per second. Parts of it are dedicated to the triangle-drawing business, because that's still the most efficient way to do it, but most of the hard work happens in the programmable parts.</p>
+<p>Since every device seems to need a driver, there is one for every GPU. And how hard can <em>that</em> be? Identify the triangle-drawing chip in question, figure out a way to talk to it, throw some triangle coordinates at it and marvel at the results.</p>
+<p>But the more I think and read about those two components, the more I get the impression that it might not be that simple.</p>
+<p>Concerning the GPU itself, I'm wondering what parts of the rendering pipeline (the process of interpreting large amounts of bits as triangle coordinates and textures and converting them to a rasterized 2D projection of a three-dimensional scene) are actually still happening in dedicated circuits, and how much of it really happens on general purpose CPUs, programmed by firmware internal to the GPU or possibly even the driver, and therefore the CPU. From what I've learned so far (mostly by reading lots of introductions to <a href="http://duriansoftware.com/joe/An-intro-to-modern-OpenGL.-Table-of-Contents.html">OpenGL</a>, <a href="http://fgiesen.wordpress.com/2011/07/09/a-trip-through-the-graphics-pipeline-2011-index/">modern GPUs</a>, <a href="https://01.org/linuxgraphics/documentation/driver-documentation-prms">technical documentations</a> and <a href="http://kernel.org/">source code</a>, everything is possible – there are software renderers that run as software on the shaders of a GPU, and, on the other end of the spectrum, "hardware" components that are fed with ASCII representations of OpenGL shaders (with the help of <a href="http://www.phoronix.com/scan.php?page=news_item&amp;px=MTIxNDk">not-so-open source drivers</a>.</p>
+<p>Some GPUs need <a href="http://phoronix.com/forums/showthread.php?38445-Confused-by-firmware">blobs of firmware</a> in order to do their job (which hints to a partial software-like approach to the problem); others <a href="http://phoronix.com/forums/showthread.php?79473-Digging-Deeper-Into-AMD-s-UVD-Code-Drop&amp;p=323934#post323934">don't</a> – but that doesn't say anything, since firmware can also be stored inside of a chip, similar to the microcode of common "CISC" CPUs.</p>
+<p>The more I think about that, the more I realize that, for this topic as for almost every other technical subject, there is no easy or general answer, and finding it the hard way takes lots of time, and also luck with finding the right documentation. Which brings me to the topic open source graphics drivers.</p>
+<p>Since most of the magic seems to be happening at least partially in software, whether on the host CPU or in embedded DSPs of the GPU (though I realize that there are quite a few ASICs left), there is an understandable, but still annoying tendency of GPU vendors to treat their driver software with as much secrecy as their actual hardware products – simply because that actual product is actually the combination of the chip and the driver.</p>
+<p>This brings us the obvious problems that all closed-source drivers share: We have no way of fixing problems when they arise, and also no way of making assertions, or even educated guesses, about the security properties of a software that runs with the highest privileges possible on millions, possibly billions, of machines storing sensitive data, both commercial and private.</p>
+<p>Apart from actual vulnerabilities in the driver code running on the CPU, I'm <a href="http://security.stackexchange.com/questions/35634/is-opengl-a-security-problem">wondering</a> to what extent processes running on the GPU itself can access the main memory of the system, and how the various drivers ensure that such memory accesses don't circumvent the process separation that is now commonplace on most operating systems thanks to the memory virtualization provided by the combination of the memory management unit of the CPU and the security mechanisms of the operating system kernel.</p>
+<p>Since shaders, the programs running on the GPU execution units, can be provided in source and sometimes also binary form by any user of the graphics (OpenGL) or general purpose (OpenCL) API, memory accesses of those shaders have to be obviously limited to something less than the whole system memory space. There seem to be two approaches:</p>
+<ul>
+<li>For some GPU drivers, that protection is provided by the driver verifying all commands that are submitted from the user space to the GPU. It checks for illegal memory accesses and other potentially dangerous operations.</li>
+<li>Other, mostly newer models provide a hardware MMU themselves that can be programmed by the operating system or the driver to disallow all memory accesses, except for the ones for data that is located in buffers owned by the same user.</li>
+</ul>
+<p>According to a <a href="http://phd.mupuf.org/files/fosdem2013_drinext_drm2.pdf">presentation on the subject</a>, the first approach is currently used by the Linux drivers for AMD and Intel GPUs, while the second one seems to be only supported by the open nouveau driver for Nvidia GPUs.</p>
+<p>The situation for OpenGL on Android seems different, even though it also uses the Linux kernel: Due to <a href="https://android.googlesource.com/kernel/tegra/+/android-tegra3-grouper-3.1-jb-mr1-fr/drivers/gpu/ion/">some references</a> in the Kernel source code of almost all Android platforms which I examined, I suspect that most or all of the Android drivers actually use an IOMMU, that is, the hardware approach to the problem. I suspect that this is because it allow the mobile GPU vendors to open-source the Kernel portion of their drivers – the verification approach can obviously only be executed in the Kernel (or a trusted userspace daemon, with even more overhead), and needs a lot of knowledge about the format of the command stream sent to the GPU, which would thereby be openly documented.</p>
+<p>As I've mentioned, most of the drivers are released as closed-source by their vendors (with Intel and possibly (I've not done any research on them) AMD being a laudable exception), but there are some open-source alternatives, most of them are created by tediously <a href="http://blog.emmanueldeloget.com/index.php?post/2013/03/08/The-SoC-GPU-driver-interview">reverse-engineering the GPUs</a>. At least for Nvidias Tegra line of mobile GPUs, that might change, though; after <a href="http://www.wired.com/wiredenterprise/2012/06/torvalds-nvidia-linux/">fingers having been pointed</a> at each other, Nvidia finally seems to <a href="http://www.phoronix.com/scan.php?page=news_item&amp;px=MTE5MTc">release a bit more</a> to the open source community in the form of both documentation and actual code commits. <a href="http://lwn.net/Articles/467769/">One of them</a> is especially interesting to me, since it confirms the IOMMU approach being used. On the mainline Linux kernel, it also <a href="https://gitorious.org/linux-tegra-drm/pages/Host1xIntroduction#Stream+validation">seems possible</a> to use the stream validation approach.</p>
+<p>So what is my point? As I've said, I have a peculiar hobby, and somehow I find the topic of GPU drivers really interesting. I still don't know nearly enough even to be able to understand the Kernel source code, but I'll continue to try to get a clearer overview nevertheless. If you've got any hints for me, please go ahead and write me (blog at lxgr dot net)!</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/05/10/graphics-processing-hardware-software/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/05/10/graphics-processing-hardware-software/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

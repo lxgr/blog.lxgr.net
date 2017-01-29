@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>TLS client certificates and Mobile Safari</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/08/27/tls-client-certs-safari/" rel="bookmark"
+           title="Permalink to TLS client certificates and Mobile Safari">TLS client certificates and Mobile Safari</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-08-27T16:02:00+02:00">
+                Published: Tue 27 August 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> <a href="//blog.lxgr.net/tag/ios.html">ios</a> </p>
+</footer><!-- /.post-info -->      <p><strong>Update (2013-08-31):</strong> Apple has asked me to refrain from publishing any details on this security-relevant bug for the time being; I hope that a fix will be released soon. When that happens (or after a reasonable amount of time has passed), the original post will be restored.</p>
+<p>Until then, I would strongly advise against using Mobile Safari when any X.509 client certificates are stored on an iOS device, e.g. an S/MIME encryption/signing certificate. Other in iOS, like Chrome, are not affected; neither are browsers on OS X (including Safari).</p>
+<p><strong>Second update (2013-10-23):</strong> Since my original post, iOS 7 has been released; the bug described below seems to have been fixed. The issue is of course still present in iOS &lt;= 6.1.4. Since it seems to be Apple's policy not to release security fixes for discontinued OS versions, this leaves older devices like the original iPad and the iPod touch (up to the 4th generation) vulnerable. That's unfortunate, but since I'm definitely not the only one who knows about the issue, here is my original post. Be sure to take care when using any client certificates on an older iOS device.</p>
+<p><strong>tl;dr:</strong> If you have an S/MIME or other X.509 client certificate installed on your iOS device, Mobile Safari will hand it out to any web server that asks for it – without asking you.</p>
+<p>Recently, I've looked into TLS with client certificates, specifically into how the various browsers and operating systems implement them.</p>
+<p>In addition to authenticating a server and securing a connection between this server and an anonymous client, TLS also allows the client to identify itself to the server using its own X.509 certificate. This mode is only used by very few services using TLS, which could be attributed to the difficulty of issuing client certificates in the first place, and protecting them against both theft and loss later on.</p>
+<p>However, I think that there are more issues with client certificates than that.</p>
+<p>First of all, the client certificate is transmitted to the server <a href="https://tools.ietf.org/html/rfc5246#section-7.4.4">unencrypted</a>, which means that everybody between the client and the server is able to identify the user trying to connect. Since an X.509 certificate frequently contains personal information like the user's full name and mail address,this seems like a bad thing to do.</p>
+<p>Additionally, TLS client certificates are used in a way that doesn't provide <a href="http://en.wikipedia.org/wiki/Deniable_authentication">deniable authentication</a>. To prove that the client is in posession of the private key corresponding to the X.509 certificate, he <a href="https://tools.ietf.org/html/rfc5246#section-7.4.8">signs all previous handshake messages</a>. Among other things, this contains a (client-provided) timestamp and the server certificate; the signature of those values <a href="http://crypto.stackexchange.com/questions/5455/does-a-trace-of-ssl-packets-provide-a-proof-of-data-authenticity">can be used to prove</a> that that somebody with access to the private key initiated a connection to a specific server at a specific time. Even worse, this signature is also still transmitted in plaintext (symmetric encryption and authentication aren't used before the next message (Finished) in the handshake.</p>
+<p>Considering those (in my opinion substantial) disadvatages of the implementation of client certificate authentication in the current version of TLS, it might be better to perform authentication inside the secure TLS channel at the application layer, which is exactly how it's done for the vast majority of web services (via HTTP cookies) and other protocols protected by TLS.</p>
+<p>(An even better solution would be a TLS extension that moves the client authentication inside the secure channel, or even uses something analogous to the server authentication in TLS, which might be able to provide deniable authentication for the client as well. But the rate at which TLS extensions and updates are adopted by software vendors is not exactly instantaneous.)</p>
+<p>Since the status quo seems to be exactly that (whether that's due to the difficulty of issuing certificates or to the mentioned disadvantages of them with TLS), is there anything left to worry about?</p>
+<p>There is: Broken browsers.</p>
+<p>Probably due to their minimal use in real-word applications, some browsers' TLS client certificate implementations are a bit sloppy. When an HTTP server requests a client certificate (using the <a href="https://tools.ietf.org/html/rfc5246#section-7.4.4">Certificate Request</a> message in the TLS handshake), most of them display a pretty technical-looking dialog to the user, who might or might not understand what's going on.</p>
+<p><img alt="Chrome's client certificate selection dialog" src="//blog.lxgr.net/images/chromecert.png" /></p>
+<p>This is clearly not an example of good user experience. So let's check how Apple does it in iOS...</p>
+<p><img alt="Mobile Safari's lack of a certificate selection dialog" src="//blog.lxgr.net/images/ioscert.png" /></p>
+<p>Oops. They don't. They just pick the first certificate available (in my case, this is an S/MIME certificate that includes my full name, my employer and my e-mail address), transmit it and authenticate to the server by non-repudiably signing the TLS handshake – all in plaintext. All the previously mentioned caveats apply, only that the user has no choice about the matter in the first place.</p>
+<p>If you want to try it yourself, just visit <a href="https://www.mikestoolbox.net/">Mike's Toolbox</a> with Mobile Safari, accept the self-signed server certificate and look for your name or e-mail address on that page.</p>
+<p>This problem has been mentioned before publicly <a href="http://forums.whirlpool.net.au/archive/1936101">at least once</a>, more than one year and one major OS version ago. On the desktop, this has already been fixed (with <a href="http://support.apple.com/kb/HT1679">OS X 10.5.3</a>); I'm really hoping it will be fixed with iOS 7 as well.</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/08/27/tls-client-certs-safari/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/08/27/tls-client-certs-safari/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

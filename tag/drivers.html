@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - drivers</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/05/20/uninitialized-buffers-in-opengl/">Uninitialized buffers in OpenGL</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-05-20T21:25:00+02:00">
+                Published: Mon 20 May 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/gpu.html">gpu</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/drivers.html">drivers</a> <a href="//blog.lxgr.net/tag/opengl.html">opengl</a> </p>
+</footer><!-- /.post-info --><p>As I've mentioned in my last article, I'm interested in the implementation details and the security of open and closed-source GPU drivers.</p>
+<p>In addition to the security implications of the model that is used by some of the current drivers (they allow the OpenGL client to send commands directly to the GPU, with the kernel only checking for illegal address references in the command stream, instead of using an actual IOMMU), there is a much simpler way to cause mischief when given access to an accelerated OpenGL implementation on a system: Uninitialized buffers.</p>
+<p>Normally, when requesting memory from the operating system (for example through the malloc standard library function, which in turn uses an anonymous, private mmap memory mapping), the kernel goes through the effort of zeroing out the contents of the newly allocated chunk of main memory. While this is not required by the C language specification in any way, and one should never rely on that implementation detail (smaller allocations could be handled by the library in a different way, and those are not guaranteed to be zero-initialized), it's a pretty important <a href="http://stackoverflow.com/questions/1622196/malloc-zeroing-out-memory">security feature</a>.</p>
+<p>Just imagine what would happen if the physical memory block used to be allocated to your browser, and contained the session cookie for an online banking session, or worse, an instance of GPG, containing your private key... And while most security-relevant code will probably go to great lengths to avoid that kind of thing from happening by overwriting the relevant memory locations before deallocating them, there is always the possibility of application crashes, which will render those protections useless.</p>
+<p>All in all, that operating system feature is really essential to guarantee the isolation among different users who are working on the same machine simultaneously. (As a side note, <a href="http://lwn.net/Articles/322823/">a similar thing</a> is performed for some file systems, which don't zero out newly-allocated blocks, but use a different method to achieve a similar effect, and to prevent users from gaining access to residual chunks of data in case of a system crash during the allocation.)</p>
+<p>I was expecting the same thing to happen for GPU driver implementations, since nowadays, many window managers use OpenGL acceleration to draw the window contents to the right locations with various effects like transparency or animated window switching. Basically, the window content is stored as an OpenGL texture, which is later mapped to a rectangle on the graphical desktop. So, in many cases, their content is at least as security-critical as the content of main memory – just think about your terminal's or browser's window content. Well, it turns out I was wrong:</p>
+<p><img alt="An uninitialized OpenGL texture" src="//blog.lxgr.net/images/gl-buffer-res.png" /></p>
+<p>This screenshot shows a simple OpenGL demonstration program, which I modified just a tiny bit: I removed the part that loads the cube texture from memory, or more accurately, replaced the pointer to the image data with a null pointer (which seems to be allowed by the OpenGL specification). It is implementation-defined whether that means that the buffer should be zero-initialized, or can remain uninitialized – and the <a href="http://nouveau.freedesktop.org/wiki/">nouveau</a> driver for my Nvidia card seems to do the latter, apparently for performance reasons.</p>
+<p>I asked the nouveau developers in the IRC channel for their view on the topic, and Dave Airlie told me that while video buffers in the main memory should be zero-initialized on nouveau, buffers residing in video memory are not overwritten by default, while theoretically possible.</p>
+<p>On integrated GPUs that use the main memory for all of their buffers, the problem could be even more severe – not only the content of other user's windows, but even arbitrary memory contents could be theoretically extracted with custom shader code. I retried the experiment on an Intel GPU, and was relieved to only see an untexturized black cube. The same thing happens on Android, where I tried it on both an Adreno- and an Nvidia Tegra–equipped device. However, this does not mean that those platforms are safe – it only means that somewhere in their OpenGL implementation, the buffer is zeroed, which might as well happen only in the userspace library, and could therefore be circumvented by directly interfacing with the command buffer (which is admittedly much more difficult, and might well be impossible for things like WebGL, where direct access to those buffers is not possible for application code).</p>
+<p>One possible mitigation for that security risk is very simple, and therefore widely used: Just don't give access to the video hardware to anyone but users that are physically present. Many Linux distributions do just that with the <code>allowed_users=console</code> setting of the <code>Xwrapper.config</code> configuration file. This reduces the attack surface significantly – most computers are only used for desktop logins by a single person at a time, and anybody who is able to run software in that user's X session (which seems to be an <a href="http://dri.freedesktop.org/wiki/DRM/">additional requirement</a> for GPU hardware access, at least on DRI/DRM) has much easier ways to grab arbitrary window contents.</p>
+<p>But with WebGL becoming more and more popular, that situation is changing – now, web page authors can execute OpenGL code on any visitor's GPU hardware, and read back the content of the resulting images (with limits imposed by the same-origin policy). This might be one of the reasons why WebGL <a href="http://www.khronos.org/webgl/security/#Access_to_Uninitialized_Memory">specifically mandates</a> that implementations clear their buffers before allocation. That's obviously a very good idea, seeing that there is even a <a href="http://www.contextis.com/research/blog/webgl-more-webgl-security-flaws/">working exploit</a> for that particular loophole! Now let's hope that all browser vendors read that part of the specification carefully, and we should be safe – but only against that specific security threat of running untrusted code on hardware with direct access to the main memory...</p><p>There are <a href="//blog.lxgr.net/posts/2013/05/20/uninitialized-buffers-in-opengl/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+                <section id="content" class="body">
+                    <h1>Other articles</h1>
+                    <hr />
+                    <ol id="posts-list" class="hfeed">
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/05/10/graphics-processing-hardware-software/" rel="bookmark"
+                           title="Permalink to Graphics processing in hardware and software">Graphics processing in hardware and software</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-05-10T20:23:00+02:00">
+                Published: Fri 10 May 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/gpu.html">gpu</a> <a href="//blog.lxgr.net/tag/hardware.html">hardware</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/drivers.html">drivers</a> </p>
+</footer><!-- /.post-info -->                <p>I've got a peculiar hobby: I like to worry about very specific implementation details of technologies I don't really understand at all; one of them being GPUs and graphics drivers.</p>
+<p>On one hand, it's really simple: In almost every computing device, there is a GPU. This is ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/05/10/graphics-processing-hardware-software/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/05/10/graphics-processing-hardware-software/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+                </ol><!-- /#posts-list -->
+                </section><!-- /#content -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

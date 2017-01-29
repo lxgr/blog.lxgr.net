@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>A quine in x86-64 assembly</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/05/10/a-quine-in-x86-64-assembly/" rel="bookmark"
+           title="Permalink to A quine in x86-64 assembly">A quine in x86-64 assembly</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-05-10T17:30:00+02:00">
+                Published: Fri 10 May 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/programming.html">programming</a> <a href="//blog.lxgr.net/tag/assembler.html">assembler</a> </p>
+</footer><!-- /.post-info -->      <p>This summer term, I'm taking a really interesting course on computer security: While the lectures are pretty theoretical (one of the topics is a proof that shows that proving the general security properties of certain models is equivalent to the halting problem, which is done by implementing a turing machine within the access model...), the homeworks are partially about x86(-64) assembly programming. My only assembly programming experiences until now were with MMIX, which is almost completely on the opposite end of the RISC/CISC spectrum than the good old x86 (not to mention that the architecture is completely theoretical and has never been implemented in hardware). To make a long story short, I finally have a reason to program some x86 assembly!</p>
+<p>Our most recent exercise sounds quite simple, but kept me busy longer than I expected: We are supposed to write a quine in x86-64 assembly, that is, a program that has its own source code as its (only) output – identical to the last byte. I was already familiar with quines, but I had never tried to create one before, and if I had, assembly would definitely not have been my language of choice, but since it was one of two non-optional homework exercises, I figured that it couldn't be so hard after all. So without further ado, here is a quine in x86-64 assembly (GNU assembler syntax):</p>
+<div class="highlight"><pre><span class="na">.att_syntax</span> <span class="no">noprefix</span>
+<span class="na">.globl</span> <span class="no">main</span>
+<span class="nl">main:</span>
+<span class="nf">pushq</span> <span class="no">rbp</span>
+<span class="nf">movq</span> <span class="no">rsp</span><span class="p">,</span> <span class="no">rbp</span>
+<span class="nf">mov</span> <span class="no">$.Cs</span><span class="p">,</span> <span class="no">rdi</span>
+<span class="nf">mov</span> <span class="no">$0xa</span><span class="p">,</span> <span class="no">rsi</span>
+<span class="nf">mov</span> <span class="no">$0x22</span><span class="p">,</span> <span class="no">edx</span>
+<span class="nf">mov</span> <span class="no">$.Cs</span><span class="p">,</span> <span class="no">ecx</span>
+<span class="nf">mov</span> <span class="no">$0x22</span><span class="p">,</span> <span class="no">r8d</span>
+<span class="nf">mov</span> <span class="no">$0xa</span><span class="p">,</span> <span class="no">r9d</span>
+<span class="nf">xor</span> <span class="no">eax</span><span class="p">,</span> <span class="no">eax</span>
+<span class="nf">call</span> <span class="no">printf</span>
+<span class="nf">xor</span> <span class="no">eax</span><span class="p">,</span> <span class="no">eax</span>
+<span class="nf">leave</span>
+<span class="nf">ret</span>
+<span class="nl">.Cs:</span> <span class="na">.string</span> <span class="s">&quot;.att_syntax noprefix</span>
+<span class="s">.globl main</span>
+<span class="s">main:</span>
+<span class="s">pushq rbp</span>
+<span class="s">movq rsp, rbp</span>
+<span class="s">mov $.Cs, rdi</span>
+<span class="s">mov $0xa, rsi</span>
+<span class="s">mov $0x22, edx</span>
+<span class="s">mov $.Cs, ecx</span>
+<span class="s">mov $0x22, r8d</span>
+<span class="s">mov $0xa, r9d</span>
+<span class="s">xor eax, eax</span>
+<span class="s">call printf</span>
+<span class="s">xor eax, eax</span>
+<span class="s">leave</span>
+<span class="s">ret%c.Cs: .string %c%s%c%c&quot;</span>
+</pre></div>
+
+
+<p>It can be compiled, executed and verified for proper quine-ness like this:</p>
+<div class="highlight"><pre>gcc quine.s -o quine <span class="o">&amp;&amp;</span> ./quine &gt; output <span class="o">&amp;&amp;</span> diff quine.s output
+</pre></div>
+
+
+<p>As do most quines, this probably needs some explanation. Generally speaking, all quines (at least the ones I've come across) share a common structure: There is some code of the language in question, and one or more rather long strings, which contain most of that code in quoted form. The trick is to print the quoted code twice: Once verbatim, and once with quotation marks and some additional characters, so that the string declaration itself is printed out. To do that, the string quotation signs have to be escaped or stored in some modified form – otherwise, they would be interpreted simply as the end of the string.</p>
+<p>The most obvious guess is to just escape them with a backslash (like so: <code>\"</code>), but that doesn't really help us – now we also have to print a backslash in our output! The solution here (and in many other quines) is to store them in another form that can be safely quoted verbatim inside of a string, but still evaluates to the desired character in the output. In this case, the <code>printf</code> C library function is used to recreate two occurences of two otherwise problematic characters: The aforementioned quotation mark and the newline character. Both characters are stored as their numeric (or more specific, hexadecimal) representation according to the ASCII codepage: <code>0xa</code> for the newline, and <code>0x22</code> for the double quotation mark. All that I was able to learn from the very nice example for a quine in C given in the (German) <a href="http://de.wikipedia.org/wiki/Quine_(Computerprogramm)">Wikipedia article on the subject</a>, which also taught me the really neat trick of using the same string twice – once as a formatting string, and once again as one of the parameters of the <code>printf</code> function.</p>
+<p>My approach was then to find a valid translation for that quine to assembly, which revolved mostly around two problems: Generating the machine instructions for the <code>printf</code> call, and escaping all occurences of problematic characters in the resulting program so that it can be stored as a valid string.</p>
+<p>The first part of the problem can be easily solved by some experimentation with a similar C program and by disassembling the binary as compiled by GCC (and identifying the relevant lines in the output!) – it boils down to moving the address of the string and the literal values of the ASCII characters to the right registers (according to the x86-64 calling convention) and executing the call.</p>
+<p>A minor detail of interest is the instruction <code>xor eax, eax</code> right before the function call: As it turns out, functions with variable-length parameter lists like <code>printf</code> expect the number of parameters passed to them in the <code>eax</code> register; in this case, there are exactly zero. I can only speculate about the reasons for this part of the calling conventions (after all, the total number of arguments is <em>not</em> passed in a register!), but I gather it has something to do with possible optimizations in functions further down/up the call stack, since saving those registers is rather costly and should be avoided if not necessary. I only figured out the importance of zeroing the register when I tried the program on a workstation at my university – while I could get away without it on my own laptop, it would invariably crash there without that instruction.</p>
+<p>Another problem would have been the newline characters: Since the GASM syntax requires a newline after every machine instruction statement, it's not possible to get away like the C quine from the mentioned article, that is, to simply write the quine on a single line. Fortunately, GCC/GASM does the right thing when confronted with "raw" newline characters inside of a string, and just treats them the same way it would handle a proper <code>\n</code> newline. This causes some warnings from my version of GCC, but compiles/assembles nevertheless – otherwise, all the newline characters would probably have to be submitted as parameters for <code>printf</code>.</p>
+<p>If you are familiar with the GASM assembly syntax, you might have noticed a minor oddity about the code: Register names are not prefixed with a percent sign as they usually have to be. The reason for that is that the percent sign has a very special meaning in the formatting string parameter of <code>printf</code> – it indicates that the following character(s) should be interpreted as a formatting directive, and replaced by a specific parameter of the function! This leads to a problem similar to simple backslash escaping: For every percent character, an ASCII-encoded percent sign has to be given to <code>printf</code> as a parameter, but for every new parameter, we need a new <code>mov</code> instruction to a register – which includes a percent sign...</p>
+<p>This part of the problem is <a href="http://codegolf.stackexchange.com/a/609">actually easier to solve on x86</a> (the 32 bit variant): Since all function parameters are there passed on the stack, they can be pushed there with the <code>push</code> instruction (<code>push $0x22</code>, <code>push $0x0a</code>, ...) – no percent sign necessary! On x86-64, the first 13 parameters are passed in processor register instead, which means that additional parameters would have to be generated by using up the first few parameter slots in a way that still creates the same output – not impossible, but very tedious (both in manual execution and code size/readability).</p>
+<p>A trick to circumvent that problem is the use of the <code>.noprefix</code> directive of GCC/GASM: Since a percent sign in front of a variable is only a visual aid to the programmer and not necessary to correctly parse the program, this option allows us to simply omit all the percent prefixes – which is just what we need.</p>
+<p>After the encoding has been taken care of, all that is left is the exact structure of the <code>printf</code> format string. As I've mentioned, every occurence of a percent character is replaced by one of the function parameters in the output, and by careful construction of the formatting string, together with the trick of using the very same string as both a formatting specification for printf and a parameter being substituted inside that formatting string it is possible to create an output that is exactly identical to the source code – a quine!</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/05/10/a-quine-in-x86-64-assembly/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/05/10/a-quine-in-x86-64-assembly/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

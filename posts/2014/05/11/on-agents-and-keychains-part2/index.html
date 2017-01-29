@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>On agents and keychains (Part 2)</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2014/05/11/on-agents-and-keychains-part2/" rel="bookmark"
+           title="Permalink to On agents and keychains (Part 2)">On agents and keychains (Part 2)</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-11T13:19:00+02:00">
+                Published: Sun 11 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->      <p>In the <a href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/">previous post</a> of this series, I've roughly described the operating environment of a password or private key agent; this time, I'll try to summarize the basic structure and tasks of such an agent.</p>
+<h1>Part 2: What does an agent do?</h1>
+<p>The job of a password or private key agent is to protect, but also to share, secrets. In the case of a password manager, the secrets are the plaintext authentication tokens, or passwords, for various user accounts and services – e.g. web and mail passwords, Wi-Fi preshared keys and many more; a private key agent like <code>ssh-agent</code> or <code>gpg-agent</code> protects one or more private keys used for signing and/or encryption of messages or for the use in authentication protocols.</p>
+<p>The entities that the secrets are (or are not) shared with are other processes running on the user's computer, running with the permissions of his user identity.</p>
+<h2>Restricting access to internal state</h2>
+<p>In order to be able to actually protect a user's secrets, the agent has to have some way to actually keep secrets from other processes. At least on a classical Unix system, this is a difficult task when running with the same permissions as those processes: As I've tried to explain in the last article, the permission model is not really designed for privilege separation of user applications.</p>
+<p>In fact, the task at hand might be better solved by a classical Unix daemon; a trusted server process running under a different user ID (either the superuser's or one specifically created for the daemon). (In fact, this is the approach Apple took for their OS X Keyring.)</p>
+<p>However, this is not the approach taken by some popular agents – but that's actually the topic of another article in this series.</p>
+<h2>Sharing secrets with trusted applications</h2>
+<p>While keeping secrets is an important task for an agent, there has to be some way for trusted applications to gain direct (in the case of passwords) or indirect (for private keys) access to those secrets – an agent that simply keeps all the secrets to itself is perfectly secure, but also perfectly useless.</p>
+<p>The concept of a "trusted application" is trickier than it might seem: How would the trustworthiness of an application be defined in the first place? One might be tempted to enumerate a set of such trusted applications, e.g. the web browser(s) of a user for web authentication passwords, their mail client for their mail passwords and so on. But how does the agent actually identify the requesting entity?</p>
+<p>Any approaches based on heuristics like the name of the executable file of the requesting process don't work: Users can install binaries in their home directory, where they can be freely replaced or modified by attackers.</p>
+<p>A more sophisticated way to ensure integrity of a requesting process would be to hash the contents of its executable file and store that hash in the agent along with the secrets. This doesn't seem trivial to do, at least in the user space – on Linux, the agent would probably have to work with the <code>/proc</code> virtual file system to identify the executable of a process, but any such checks would be very likely be susceptible to <a href="https://en.wikipedia.org/wiki/Time_of_check_to_time_of_use">TOCTOU</a> vulnerabilities. The operating system might theoretically be able to provide the agent with a trustworthy hash of a requestor, though – but I suspect that this is not possible on the stock Linux kernel, for example.</p>
+<p>An alternative to hashing the requesting binary is code signing. Operating systems that allow executable files to be signed by their developers or some other entity could provide the agent with the identity of the signer, which would allow "safe" modifications of the requester by its original developer or a system administrator (e.g. software updates or security patches).</p>
+<p>Unfortunately, even if the authenticity of the requestor could be determined beyond doubt, this is still not enough: What if the attacker is able to coerce an otherwise trusted application to make a request on their behalf, and reveal the reply to them? This scenario will be part of another future article.</p>
+<h2>Limitations to the agent model</h2>
+<p>Before examining some agents in detail, it should be said that there are some fundamental limitations to what even a perfectly secure agent can achieve. If the user's machine (or even only his own account) is compromised in a global way, e.g. by an attacker that installs a key logger or is able to remotely control a user's session, the security benefits of the agent might very well be completely negated.</p>
+<p>In other words, it is probably sufficient for an agent to be as secure as the environment it is operating in. An OS that does not provide even basic application isolation for graphical applications is very hard to protect indeed. (Unfortunately, almost all X11-based desktop environments are all but impossible to secure against untrustworthy applications.)</p>
+<p>Even then, an agent might be of limited utility on such an untrustworthy system, if its task is to only indirectly grant access to sensitive data. This is exactly the situation for an SSH or GPG agent: By design, such an agent will never expose a user's private keys, but will only execute various private key operations on requestor-provided data items.</p>
+<p>While an attacker with user privileges will be able to execute a number of such operations (e.g. logins on remote servers, decryption of single messages), after the compromise is detected, the keys do not necessarily have to be changed or revoked. (This might not be the case for some applications, though – e.g., if it is possible to sign new public keys with an existing private key and mark them a originating from the same user.)</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2014/05/11/on-agents-and-keychains-part2/';
+        var disqus_url = '//blog.lxgr.net/posts/2014/05/11/on-agents-and-keychains-part2/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

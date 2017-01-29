@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - blog</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/03/15/static-blog-http-caching/">Static blogs and HTTP caching</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-03-15T10:56:00+01:00">
+                Published: Fri 15 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/web.html">web</a> <a href="//blog.lxgr.net/tag/blog.html">blog</a> <a href="//blog.lxgr.net/tag/caching.html">caching</a> </p>
+</footer><!-- /.post-info --><p>As you can see in the footer, this blog is powered by <a href="http://getpelican.com">Pelican</a>, a static blog generator written in Python. It's really simple to use and fits my requirements nicely – I can write posts offline on my notebook and view the results in my browser with the included web server, it doesn't require any insecure server-side software (the output is plain HTML, CSS and a bit of JavaScript for browsers that are not quite up to date) and is very easy on server resources because by default, almost everything can be cached by web browsers.</p>
+<p>However, there is one annoying side effect of everything being cached: Since that also includes the landing page, new posts could be invisible to recurring visitors for quite a while. In a bit more detail, here is what is going on at the HTTP level:</p>
+<p>By default, my webserver, lighttpd, delivers all static HTML pages with no explicit caching headers, but includes the modification time of the resource (only the relevant headers are included) and an <a href="http://en.wikipedia.org/wiki/HTTP_ETag"><code>ETag</code></a>:</p>
+<div class="highlight"><pre>Date: Fri, 15 Mar 2013 10:03:43 GMT
+ETag: &quot;4531062&quot;
+Last-Modified: Thu, 14 Mar 2013 20:12:06 GMT
+</pre></div>
+
+
+<p>The <code>ETag</code> is good to have (browsers can use it to unambiguously revalidate cached content with the server, as I'll explain later), but the <code>Last-Modified</code>–Header combined with <em>no</em> explicit statement about cacheability triggers a heuristic <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec13.2.4">defined in HTTP</a> in most browsers. Basically, browsers calculate the difference between the time the resource was retrieved and the time it was last modified on the server, and cache the resource for 10% of that value <em>without revalidating with the server</em>.</p>
+<p>This means that for a blog that is daily updated with new posts, users will eventually see the posts after a few hours after their last visit, but for a blog that hasn't been updated for several weeks or months, ten percent of that time can be pretty significant.</p>
+<p>A simple solution is to just manually define a cache validity in the HTTP headers for some or all resources. lighttpd has the <a href="http://redmine.lighttpd.net/projects/1/wiki/Docs_ModExpire"><code>expires</code> module</a> that does just that. Here is the relevant line in my <code>lighttpd.conf</code>:</p>
+<div class="highlight"><pre><span class="k">expire.url</span> <span class="p">=</span> <span class="s">(</span> <span class="s">&quot;/theme/&quot;</span> <span class="p">=</span><span class="s">&gt;</span> <span class="s">&quot;access</span> <span class="s">plus</span> <span class="mi">7</span> <span class="s">days&quot;,</span> <span class="s">&quot;&quot;</span> <span class="p">=</span><span class="s">&gt;</span> <span class="s">&quot;access</span> <span class="s">plus</span> <span class="mi">1</span> <span class="s">hours&quot;</span> <span class="s">)</span>
+</pre></div>
+
+
+<p>The effect is that all resources in the subdirectory <code>theme</code> will have an <code>Expires</code> header 7 days in the future, and everything else will be valid for just an hour. This is a tradeoff between server and client resource usage and immediate updates: For me, an hour of delay is not a big deal, and users jumping back and forth between blog posts will be able to do so without any further HTTP requests. Here are the response headers of the main blog page:</p>
+<div class="highlight"><pre>Cache-Control: max-age=3600
+Date: Fri, 15 Mar 2013 10:23:06 GMT
+ETag:&quot;4531062&quot;
+Expires: Fri, 15 Mar 2013 11:23:06 GMT
+Last-Modified: Thu, 14 Mar 2013 20:12:06 GMT
+</pre></div>
+
+
+<p>As you can see, the <code>max-age</code> directive exlicitly states a validity of 3600 seconds, and the <code>Expires</code> header also points to a value one hour in the future.</p>
+<p>Even when that time is reached, the whole resource doesn't have to be transferred again: Browsers can just perform a conditional HTTP request using the <code>ETag</code> or <code>Last-Modified</code> headers that they cache together with the resource itself. If the content is still the same, the server will be able to deduce that from the headers and reply with a <code>304 Not Modified</code> HTTP response. As long as your site is not very highly frequented or references many additional resources, cache revalidation is not too expensive.</p>
+<p>One thing that has also helped me tremendously in understanding HTTP caching was <a href="http://stackoverflow.com/a/385491/1016939">an answer on Stackoverflow</a> that explains how to force the various browsers to revalidate a resource or to completely bypass the cache – for debugging, it's very useful to know that there is a big difference between pressing <code>F5</code> or <code>Ctrl + F5</code> in most browsers.</p><p>There are <a href="//blog.lxgr.net/posts/2013/03/15/static-blog-http-caching/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

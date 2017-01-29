@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - shell</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/03/13/variable-indirection-shell-scripts/">Variable indirection in shell scripts</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-03-13T15:30:00+01:00">
+                Published: Wed 13 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/shell.html">shell</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/programming.html">programming</a> </p>
+</footer><!-- /.post-info --><p>Recently, I had to find a way to do variable indirection in a shell script. More specifically, I wanted to write a function that takes two arguments and interprets one of them as a string, and the other one as a variable to which that string should be added – a simple append function.</p>
+<p>Usually, that would be a good occasion to switch to some more comfortable scripting language than the unix shell, but sometimes that's not possible. So here is how to do it (thanks to <a href="http://tldp.org/LDP/abs/html/ivr.html">an article on TLDP</a>):</p>
+<div class="highlight"><pre>append<span class="o">()</span> <span class="o">{</span>
+    <span class="c"># Appends the value of $1 to the variable indicated by $2</span>
+    <span class="nb">eval</span> <span class="nv">$2</span><span class="o">=</span><span class="se">\&quot;\$</span><span class="nv">$2</span> <span class="nv">$1</span><span class="se">\&quot;</span>
+<span class="o">}</span>
+</pre></div>
+
+
+<p><a href="http://tldp.org/LDP/abs/html/internal.html#EVALREF"><code>eval</code></a> is a very useful shell built-in that converts a string to a command, performing the regular shell variable substitution. In the small function above, this means that when calling the function like this:</p>
+<div class="highlight"><pre><span class="nv">A_VARIABLE</span><span class="o">=</span><span class="s2">&quot;initial value&quot;</span>
+append <span class="s2">&quot;some string&quot;</span> <span class="s2">&quot;A_VARIABLE&quot;</span>
+</pre></div>
+
+
+<p>The line</p>
+<div class="highlight"><pre><span class="nb">eval</span> <span class="nv">$2</span><span class="o">=</span><span class="se">\&quot;\$</span><span class="nv">$2</span> <span class="nv">$1</span><span class="se">\&quot;</span>
+</pre></div>
+
+
+<p>first becomes (by regular shell variable substitution)</p>
+<div class="highlight"><pre><span class="nb">eval </span><span class="nv">A_VARIABLE</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$A_VARIABLE</span><span class="s2"> some string&quot;</span>
+</pre></div>
+
+
+<p>which is then evaluated as a command, again with variable substitution:</p>
+<div class="highlight"><pre><span class="nv">A_VARIABLE</span><span class="o">=</span><span class="s2">&quot;initial value some string&quot;</span>
+</pre></div>
+
+
+<p>At least, I hope that this is what is actually going on... Quote escaping in shell scripts can be tricky sometimes. Many more useful examples of indirect references can be found in the referenced article.</p><p>There are <a href="//blog.lxgr.net/posts/2013/03/13/variable-indirection-shell-scripts/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

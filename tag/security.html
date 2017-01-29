@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - security</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2014/05/12/on-agents-and-keychains-part3/">On agents and keychains (Part 3)</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2014-05-12T21:40:00+02:00">
+                Published: Mon 12 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info --><p>In the previous posts of this series, I've <a href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/">described the operating environment</a> of a password or private key agent and <a href="//blog.lxgr.net/posts/2014/05/11/on-agents-and-keychains-part2/">given a summary of their tasks</a>. This time, we'll see how some real-world agents are implemented.</p>
+<p>But before that, a disclaimer: I'm merely an interested observer of all of the tools mentioned below. All my knowledge is from looking at their documentation, source code and from practical experiments. If you plan to use any of them for your private, sensitive data, you should definitely not rely solely on this analysis.</p>
+<h1>Part 3: Real-world password and private key agents</h1>
+<h2><code>ssh-agent</code></h2>
+<p>The first tool we'll be looking at is my personal favorite of the batch: <a href="http://manpages.ubuntu.com/manpages/trusty/en/man1/ssh-agent.1.html"><code>ssh-agent</code></a>. Its job is to protect an user's private SSH authentication keys.</p>
+<p>Usually, those keys are stored in the user's home directory, encrypted with a symmetric key derived from a passphrase that has to be entered every time the key is used to connect to a remote server using SSH; <code>ssh-agent</code> was developed to avoid having to type it that often.</p>
+<p>When an instance of <code>ssh-agent</code> is started, it creates a <a href="https://en.wikipedia.org/wiki/Unix_domain_socket">Unix domain socket</a>; the file system path of that socket will usually be stored in an environment variable called <code>SSH_AUTH_SOCKET</code>. Starting the agent and setting the variable is usually handled by a few lines in the user's desktop and/or shell configuration files. This socket is then used by <code>ssh-agent</code>'s clients to request various operations.</p>
+<p>First of all, to be of any use, the private keys have to be actually loaded into the memory of the agent. This is performed by a tool called <a href="http://manpages.ubuntu.com/manpages/trusty/en/man1/ssh-add.1.html"><code>ssh-add</code></a>, which basically asks the user for his passphrase and the location of his private keys, decrypts them in memory, and sends them over the Unix socket to the agent.</p>
+<p>The nice thing about <code>ssh-agent</code>'s <a href="http://www.openbsd.org/cgi-bin/cvsweb/src/usr.bin/ssh/PROTOCOL.agent?rev=HEAD;content-type=text%2Fplain">protocol</a> spoken over the socket is this: There is no command to extract a private key from it. Clients (mostly instances of the SSH client, <code>ssh</code>, really) can request the agent to sign some data on their behalf, which in turn allows them to authenticate against a remote SSH server. There are some other commands (e.g. to remove some or all private keys, temporarily lock or unlock the agent with a password, or get a list of currently loaded keys), but except for security bugs or other side channels, there is no way to make the agent reveal the private keys.</p>
+<p>As I've mentioned, a security tool can only be as secure as the environment it's running in and on whose security measures it is relying on. In the case of <code>ssh-agent</code>, this is the user's Unix account, and in many cases some graphical desktop environment. <code>ssh-agent</code> (or at least the version of OpenSSH included in Ubuntu) tries to limit the ways other applications in the same context can interact with its virtual memory by <a href="http://bazaar.launchpad.net/~ubuntu-branches/ubuntu/trusty/openssh/trusty/view/head:/ssh-agent.c#L1154">disabling</a> the <code>ptrace(2)</code> facility of the operating system. I'll write a lot more on that in a future post, but for now, it suffices to say that this (hopefully) makes it impossible for other processes to peek into an agent's memory space (using <code>gdb</code> or the <code>/proc/&lt;pid&gt;/mem</code> device).</p>
+<h2><code>gpg-agent</code></h2>
+<p>The next tool on our list seems to be quite similar to <code>ssh-agent</code>: <a href="https://www.gnupg.org/documentation/manuals/gnupg/Invoking-GPG_002dAGENT.html"><code>gpg-agent</code></a> also protects private keys, uses a Unix socket and an environment variable to answer to requests, and runs with the user's permissions, started in one of the various startup scripts of the desktop environment. It is used to protect a user's private (or secret) <a href="https://www.gnupg.org/">GnuPG</a> encryption and signature keys.</p>
+<p>Unfortunately, the similarity ends when it comes to how <code>gpg-agent</code> protects the user's private keys. In fact, I couldn't believe my eyes when I ran <code>strace</code> on an instance of <code>gpg</code> while executing a private-key operation:</p>
+<div class="highlight"><pre><span class="gp">$</span> strace gpg --armor --gen-revoke 2F5BBF5C
+<span class="go">write(8, &quot;GET_PASSPHRASE 1AA19BADB016B8BF3&quot;..., 203) = 203</span>
+<span class="gp">#</span> <span class="o">[</span>...<span class="o">]</span>
+<span class="go">read(8, &quot;OK 70617373776F7264&quot;, 1002)    = 19</span>
+</pre></div>
+
+
+<p><code>gpg-agent</code> is not a private key agent at all! It merely caches the private key passphrase, handing it out to anyone asking niecly over the Unix domain socket (which means every application running with the user's privileges). This negates almost all of the security benefits of using an agent in the first place, and on top of that, it is even <em>less</em> secure than just storing the private key in the agent's memory: If the user's session is compromised, not only the private key, but also the passphrase can be recovered by an attacker.</p>
+<p>I can only guess that there are various historical reasons for <code>gpg-agent</code>'s architecture, but <code>ssh-agent</code> shows that there is a better way to handle private key caching in the userspace.</p>
+<h2>GNOME Keyring</h2>
+<p>GNOME is used as the default desktop environment for many Linux distributions; and even more are using only some parts while providing their own user interface (window manager, compositor, default applicatoins etc.) – Ubuntu is a famous example of the latter category.</p>
+<p>The GNOME applications include a handy tool called <a href="https://wiki.gnome.org/Projects/GnomeKeyring/">GNOME Keyring</a>, which is primarily a password manager, but can also act as a private-key manager for both SSH and GnuPG. I'm not using its private-key features any more for various reasons, but it is still my password manager of choice for everything else (primarily for web browsers).</p>
+<p>The documentation page of the software is <a href="https://wiki.gnome.org/Projects/GnomeKeyring/SecurityPhilosophy">very upfront</a> about what the tool can and cannot achieve: The developers openly state that for the current desktop architecture, secure privilege separation between applications is simply not possible.</p>
+<p>There used to be some kind of access control system for applications, but as it is now, every application running with the user's privileges can store and request plaintext passwords to and from the agent, which in turn stores them in an encrypted database in the user's home directory.</p>
+<p>The encryption key is derived from a passphrase defined by the user; if it is equal to their Unix login password, the keychain is conveniently "unlocked" (i.e., the encryption key is stored in the Keyring daemon's memory) as soon as the user logs in to their desktop.</p>
+<p><code>gnome-keyring</code> doesn't perform any security theater to make it seem as if the passwords of an unlocked keyring were somehow more secure than they are, but like <code>ssh-agent</code>, its memory is protected from access by other user processes on my system (because its binary has a <a href="http://manpages.ubuntu.com/manpages/trusty/man7/capabilities.7.html">Linux capability</a> enabled).</p>
+<h2>OS X Keychain</h2>
+<p>Like GNOME, OS X provides users with a way to securely store their passwords on the disk while still granting automatic access to other applications as long as the user is logged in: <a href="https://developer.apple.com/library/mac/documentation/security/conceptual/keychainServConcepts/02concepts/concepts.html">OS X Keychain</a>. However, it aims to go even further than that: By using an ACL based on the code signature or binary hash of requesting programs, it <a href="https://developer.apple.com/library/mac/documentation/security/conceptual/keychainServConcepts/02concepts/concepts.html#//apple_ref/doc/uid/TP30000897-CH204-CJBIBIBC">restricts access</a> to the stored password to a subset of all applications running with the user's permissions.</p>
+<p>The OS X desktop environment, at least theoretically, also seems to implement more security measures than X11: Applications do not seem to be able to <a href="https://developer.apple.com/library/mac/documentation/cocoa/conceptual/eventoverview/MonitoringEvents/MonitoringEvents.html">install global keyloggers</a> without first requesting special permissions from the user and the <code>ptrace</code> system call (or its cousin, <code>task_for_pid</code>, as it is known on OS X) is only available to <a href="https://blogs.oracle.com/dns/entry/understanding_the_authorization_framework_on">privileged users</a> or <a href="http://wiki.lazarus.freepascal.org/GDB_on_OS_X_Mavericks_and_Xcode_5">signed debugging tools</a> (which in turn require user authentication).</p>
+<p>Additionally, the Keychain service seems to be running with superuser privileges, so it might theoretically be able to perform some additional verifications of the process requesting a password (maybe the aforementioned checks of the binary hash and/or code signature).</p>
+<p>But is that really enough to protect all potentially malicious, <a href="http://juusosalonen.com/post/30923743427/breaking-into-the-os-x-keychain">non-root</a> accesses to the stored passwords? That will be the topic of the article concluding this little series, but before that, we'll see how process memory isolation of binaries running with the same user permissions could possibly be achieved.</p><p>There are <a href="//blog.lxgr.net/posts/2014/05/12/on-agents-and-keychains-part3/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+                <section id="content" class="body">
+                    <h1>Other articles</h1>
+                    <hr />
+                    <ol id="posts-list" class="hfeed">
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2014/05/11/on-agents-and-keychains-part2/" rel="bookmark"
+                           title="Permalink to On agents and keychains (Part 2)">On agents and keychains (Part 2)</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-11T13:19:00+02:00">
+                Published: Sun 11 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>In the <a href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/">previous post</a> of this series, I've roughly described the operating environment of a password or private key agent; this time, I'll try to summarize the basic structure and tasks of such an agent.</p>
+<h1>Part 2: What does an agent do?</h1>
+<p>The job of a password or ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2014/05/11/on-agents-and-keychains-part2/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2014/05/11/on-agents-and-keychains-part2/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/" rel="bookmark"
+                           title="Permalink to On agents and keychains (Part 1)">On agents and keychains (Part 1)</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-10T14:22:00+02:00">
+                Published: Sat 10 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>Many people, myself included, use tools like ssh-agent or gpg-agent to protect their private keys from theft without sacrificing the convenience of password-less logins. Presumably even more people use some kind of password manager, whether that is the one included with their operating system or a third-party one. I've ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2014/05/10/on-agents-and-keychains-part1/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2014/05/08/ssh-agent-osx-keychain/" rel="bookmark"
+                           title="Permalink to ssh-agent and the OS X Keychain">ssh-agent and the OS X Keychain</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-08T16:06:00+02:00">
+                Published: Thu 08 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> <a href="//blog.lxgr.net/tag/osx.html">osx</a> </p>
+</footer><!-- /.post-info -->                <p>Are you relying on OS X's Keychain to protect your SSH key passphrases? You
+shouldn't. (The "plain" ssh-agent is fine, though.)</p>
+<p>To be continued!</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2014/05/08/ssh-agent-osx-keychain/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2014/05/08/ssh-agent-osx-keychain/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/10/24/thoughts-on-cloud-password-sync/" rel="bookmark"
+                           title="Permalink to Thoughts on a cloud-based password synchronization service">Thoughts on a cloud-based password synchronization service</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-10-24T16:15:00+02:00">
+                Published: Thu 24 October 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>Today, Apple has enabled its cloud-based password synchronization service, iCloud Keychain. The service promises to safely store and synchronize passwords and other sensitive user data like credit card numbers among multiple devices. Apple claims that the information is protected with AES, but that alone is meaningless without knowing where that ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/10/24/thoughts-on-cloud-password-sync/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/10/24/thoughts-on-cloud-password-sync/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/08/30/deterministic-dsa-signatures-openssl/" rel="bookmark"
+                           title="Permalink to Safe deterministic (EC)DSA signatures are coming to OpenSSL">Safe deterministic (EC)DSA signatures are coming to OpenSSL</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-08-30T00:37:00+02:00">
+                Published: Fri 30 August 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>By now, everybody involved in implementing algorithms using the DSA or the ECDSA signature schemes should <em>really</em> understand <a href="http://tools.ietf.org/html/rfc6979">the importance of a proper secret nonce</a> as one of the inputs for a signature.</p>
+<p>This is easy to get wrong, both because PRNGs <a href="http://www.debian.org/security/2008/dsa-1571">are</a> <a href="http://kakaroto.homelinux.net/2012/01/how-the-ecdsa-algorithm-works/">really</a>, <a href="http://jbp.io/2013/08/15/android-securerandom-guess/">really</a>, <a href="http://android-developers.blogspot.com/2013/08/some-securerandom-thoughts.html">really</a> <a href="http://armoredbarista.blogspot.com/2013/03/randomly-failed-weaknesses-in-java.html">hard</a> to get right ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/08/30/deterministic-dsa-signatures-openssl/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/08/30/deterministic-dsa-signatures-openssl/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/08/27/tls-client-certs-safari/" rel="bookmark"
+                           title="Permalink to TLS client certificates and Mobile Safari">TLS client certificates and Mobile Safari</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-08-27T16:02:00+02:00">
+                Published: Tue 27 August 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> <a href="//blog.lxgr.net/tag/ios.html">ios</a> </p>
+</footer><!-- /.post-info -->                <p><strong>Update (2013-08-31):</strong> Apple has asked me to refrain from publishing any details on this security-relevant bug for the time being; I hope that a fix will be released soon. When that happens (or after a reasonable amount of time has passed), the original post will be restored.</p>
+<p>Until then, I ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/08/27/tls-client-certs-safari/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/08/27/tls-client-certs-safari/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/08/15/android-securerandom-not-even-nonce/" rel="bookmark"
+                           title="Permalink to Android's SecureRandom - not even nonce">Android's SecureRandom - not even nonce</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-08-15T15:30:00+02:00">
+                Published: Thu 15 August 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> <a href="//blog.lxgr.net/tag/android.html">android</a> </p>
+</footer><!-- /.post-info -->                <p>There has been a bit of drama about the <a href="https://bitcointalk.org/index.php?topic=271486.0">theft of some 55 Bitcoins</a> (worth about $5500 at the current exchange rate), with the common denominator that all of the corresponding private keys were stored in Android wallets. While this is not nearly the first case of Bitcoin theft, it ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/08/15/android-securerandom-not-even-nonce/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/08/15/android-securerandom-not-even-nonce/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/03/29/vpn-ipv6-part2/" rel="bookmark"
+                           title="Permalink to VPNs and IPv6, part 2">VPNs and IPv6, part 2</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-29T17:28:00+01:00">
+                Published: Fri 29 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/vpn.html">vpn</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>As I've <a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/">written before</a>, VPNs can lead to insecure situations when used with IPv6 enabled networks.</p>
+<p>The easiest way to mitigate that problem is actually just to enable IPv6 tunneling over the VPN itself, provided your VPN gateway has IPv6 connectivity and you have a spare /64 subnet you ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/03/29/vpn-ipv6-part2/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/03/29/vpn-ipv6-part2/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/03/13/tls-rc4-not-so-secure/" rel="bookmark"
+                           title="Permalink to TLS and RC4 - not so secure after all">TLS and RC4 - not so secure after all</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-13T11:24:00+01:00">
+                Published: Wed 13 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/cryptography.html">cryptography</a> <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <p>Turns out that TLS with RC4 (which was <a href="http://blog.phonefactor.com/2011/09/23/slaying-beast-mitigating-the-latest-ssltls-vulnerability/">supposed to protect us</a> against the BEAST and the CRIME attacks) is <a href="http://www.isg.rhul.ac.uk/tls/">not so secure after all</a>:</p>
+<blockquote>
+<p>The attacks arise from statistical flaws in the keystream generated by the RC4 algorithm which become apparent in TLS ciphertexts when the same plaintext is ...</p></blockquote>
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/03/13/tls-rc4-not-so-secure/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/03/13/tls-rc4-not-so-secure/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/" rel="bookmark"
+                           title="Permalink to VPNs and IPv6">VPNs and IPv6</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-06T10:31:00+01:00">
+                Published: Wed 06 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/vpn.html">vpn</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->                <!--- Summary: Inadverted VPN circumvention by IPv6 -->
+
+<p>A while ago, I have configured a small OpenVPN for personal use (mostly for security when using public wireless networks) with <a href="http://openvpn.net/">OpenVPN</a>. The setup is pretty easy, thanks to a <a href="http://wiki.openvpn.eu/index.php/Konfiguration_eines_Internetgateways">very helpful tutorial (in German)</a> and the sensible default settings of OpenVPN itself. (Setting up the certificate infrastructure was a ...</p></!--->
+                <a class="readmore" href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+                </ol><!-- /#posts-list -->
+                </section><!-- /#content -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

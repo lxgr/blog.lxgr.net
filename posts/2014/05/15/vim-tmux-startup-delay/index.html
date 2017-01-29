@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>vim and that weird one-second startup delay</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2014/05/15/vim-tmux-startup-delay/" rel="bookmark"
+           title="Permalink to vim and that weird one-second startup delay">vim and that weird one-second startup delay</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-15T20:16:00+02:00">
+                Published: Thu 15 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/software.html">software</a> </p>
+</footer><!-- /.post-info -->      <p>Are you using <code>vim</code>, <code>tmux</code>, a graphical Linux desktop and are you experiencing random sluggishness when starting your editor? If not, you can skip this one.</p>
+<p>This is something that had been bugging me for ages, first at work on my workstation, then at home: Long-running <code>tmux</code> sessions would sporadically induce startup delays of the <code>vim</code> editor of exactly one second. Reattaching <code>tmux</code> didn't solve the problem; logging out and back into my desktop always did.</p>
+<p>First I thought I was just being impatient, but after some profiling with <code>time</code>, I was getting curious. <code>strace</code> revealed that the delay was <em>exactly</em> one second: Something in <code>vim</code>s startup process was calling the <code>nanosleep(2)</code> system call with one second as an argument!</p>
+<p>To make a long story short: This is caused by some X library that is mislead by a broken environment variable <code>SESSION_MANAGER</code> from a former X session. <code>tmux</code> tends to get rather attached to environment variables, which, in this instance, causes the sluggishness.</p>
+<p>If the problem goes away after executing</p>
+<div class="highlight"><pre>unset SESSION_MANAGER
+</pre></div>
+
+
+<p>or something similar for your shell, you can fix it permanently by appending the following line to your <code>.tmux.conf</code>:</p>
+<div class="highlight"><pre>set-option -g -a update-environment &quot; SESSION_MANAGER&quot;
+</pre></div>
+
+
+<p>If you are now wondering why <code>vim</code> would need access to some X-related variables in the first place (as I was): It lets <code>vim</code> access your X clipboard! (Strangely, the variable <code>SESSION_MANAGER</code> is not actually needed for that, but you can verify it by overwriting some more critical X variable like <code>DISPLAY</code> or <code>XAUTHORITY</code> and subsequently trying to use the X clipboard from within <code>vim</code>.)</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2014/05/15/vim-tmux-startup-delay/';
+        var disqus_url = '//blog.lxgr.net/posts/2014/05/15/vim-tmux-startup-delay/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - android</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/08/15/android-securerandom-not-even-nonce/">Android's SecureRandom - not even nonce</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-08-15T15:30:00+02:00">
+                Published: Thu 15 August 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> <a href="//blog.lxgr.net/tag/android.html">android</a> </p>
+</footer><!-- /.post-info --><p>There has been a bit of drama about the <a href="https://bitcointalk.org/index.php?topic=271486.0">theft of some 55 Bitcoins</a> (worth about $5500 at the current exchange rate), with the common denominator that all of the corresponding private keys were stored in Android wallets. While this is not nearly the first case of Bitcoin theft, it is probably the first one that is a direct result of a crypto bug.</p>
+<p>In this case, the problem resulted from the (re)use of the nonce used in the elliptic curve signatures that are used to generate Bitcoin transactions. As everybody familiar with (or even implementing) ECC-based encryption schemes should know well by know, reusing the signature nonce, or using a predictable value even once, <a href="http://blog.cryptographyengineering.com/2012/03/surviving-bad-rng.html">results in catastrophic failure</a>: The private key can then be trivially calculated from the signature(s). (If you don't believe me, just ask Sony...) This seems to be the method that was used to steal the Bitcoins in question.</p>
+<p>So far, so bad. The obvious question now is: Who was responsible for reusing the nonces in the first place? Since the flaw is not limited to a single wallet implementation, but only occurs on Android (even though some of the Bitcoin libraries are also used on desktop bitcoin clients), people quickly came to the conclusion that there must be a flaw in one of Android's cryptographic libraries.</p>
+<p>In <a href="http://permalink.gmane.org/gmane.comp.bitcoin.devel/2714">an announcement</a> to the Bitcoin dev mailing list, Mike Hearn, the developer of the Java library bitcoinj announced that the offender in question is the class <code>SecureRandom</code> of the Android framework. The various wallets for Android were quickly patched to avoid that class and use <code>/dev/urandom</code> directly, and as far as their developers and users are concerned, the problem is now solved.</p>
+<p>However, when there is a bug in a security primitive implemented in a such widely used library, chances are that other users are also affected. So what exactly went wrong, and what are the implications?</p>
+<p>Shortly after the announcement of the bug, people were quick to point to <a href="http://armoredbarista.blogspot.com.au/2013/03/randomly-failed-weaknesses-in-java.html">a paper discussing several vulnerabilities</a> of the <code>SecureRandom</code> implementations of various Java frameworks, among them Apache Harmony, which is the base for Google's Android framework. </p>
+<p>Indeed, Android <a href="http://androidxref.com/4.3_r2.1/xref/libcore/luni/src/main/java/org/apache/harmony/security/provider/crypto/SHA1PRNG_SecureRandomImpl.java">uses that implementation</a> - but only up to and including version 4.1. Additionally, according to the paper, the flaw limits the entropy of an instance of <code>SecureRandom</code> to 64 bits of entropy. This is not enough for cryptographic applications like key generation or nonces, but also doesn't explain why in many cases, the exact same values were generated. <a href="http://en.wikipedia.org/wiki/Birthday_problem">On average</a>, 2^32 transactions would have to be generated to yield a single collision – all of those with the same key, e.g. bitcoin address.</p>
+<p>Another problem of the Harmony implementation of <code>SecureRandom</code> is that using <code>setSeed()</code> on an instace replaces the existing entropy in the generator (instead of being mixed securely combined with it). When used wrongly (e.g. by seeding with not-so-random data), this could also lead to predictable values generated by the instance. (This behavior was even used by some applications to use <code>SecureRandom</code> together with a deterministic seed as some kind of key storage facility. Madness, I know...)</p>
+<p>With Android 4.2, Google <a href="http://android-developers.blogspot.co.at/2013/02/security-enhancements-in-jelly-bean.html">finally switched</a> to <a href="http://androidxref.com/4.3_r2.1/xref/libcore/luni/src/main/java/org/apache/harmony/xnet/provider/jsse/OpenSSLRandom.java">a different implementation based on OpenSSL</a>. Since then, calls to the <code>setSeed()</code> method augment the internal entropy, instead of replacing it, as it should be. The new generator is even used when specifically asking for the Harmony-based one; obviously somebody at Google regarded the flaws important enough to allow modifying the behavior of legacy apps. (Of course, <a href="http://android-developers.blogspot.co.at/2013/02/using-cryptography-to-store-credentials.html">this broke all off-label usages</a> of <code>SecureRandom</code> in the process).</p>
+<p>So, Android versions from 4.2 should be safe, right? As it turns out, <a href="http://android-developers.blogspot.co.at/2013/08/some-SecureRandom-thoughts.html">they are not</a>. In some circumstances (I haven't looked at the source yet), the new <code>SecureRandom</code> implementation goes horribly, horribly wrong and returns identical values for successive invocations. This is obviously very bad, not only for Bitcoin wallets, but basically for everybody using the Java cryptographic operations. According to the Android devs, that includes Key generation of symmetric and asymmetric keys (using the <code>KeyGenerator</code>, <code>KeyPairGenerator</code> and <code>KeyAgreement</code> classes).</p>
+<p>Ironically, using <code>setSeed()</code> with proper random data with the OpenSSL implementation avoids the bug, which leads to the interesting situation that using <code>setSeed()</code> is discouraged for Android 4.1 and earlier, but is essential for 4.2. (Android 4.3 seems to avoid both bugs, according to the code in the blog post). The Android developers were kind enough to provide a ready-to-use mitigation in the form of a drop-in replacement for <code>SecureRandom</code> that does exactly that. (You should probably still be careful for older Android versions using the Harmony implementation – all the caveats for that mentioned in the paper still apply.)</p>
+<p>Every Android developer using one of the affected classes should evaluate their usage, implement <a href="http://android-developers.blogspot.co.at/2013/08/some-SecureRandom-thoughts.html">the workaround</a> and necessary countermeasures, which could include warning your users to replace any keys generated with the weak random number generator, which is exactly what the developer of Bitcoin Wallet for Android <a href="https://code.google.com/p/bitcoin-wallet/source/detail?r=d9f996e218dd50c58855872c761e4acdd1ea1d15">did</a> promptly after learning about the vulnerability (the update generates a new, secure Bitcoin address and immediately transfers all funds to it after the update). If you don't trust any of the Android implementations of <code>SecureRandom</code> anymore, you should take a look at <a href="https://code.google.com/p/bitcoin-wallet/source/browse/wallet/src/de/schildbach/wallet/util/LinuxSecureRandom.java">his implementation</a> based directly on <code>/dev/urandom</code>.</p>
+<p>As a user, you should check if there is an update available for any of your security-relevant applications, and when in doubt, stop using keys generated on one of the vulnerable Android versions (Android 4.2, and to a lesser degree also everything from before – the 64-bits of entropy again). I plan to evaluate some of the obvious candidates like ConnectBot myself.</p>
+<p>This is my preliminary analysis on the situation - if you have anything to share on the matter, or have spotted some wrong conclusions in my argumentation, please leave your comment below or drop me a message!</p>
+<p>A side note on the Bitcoin side of the ECC nonce problem: The original Bitcoin implementation elegantly avoids the problem, since it only reveals the public key at the moment of a transaction, and sends the "change" to a newly generated address, to which the ECC key remains unknown until the next transaction. This doesn't apply universally (for example if you receive transactions to an address which you have already used to send coins previously, e.g. well-known donation address; special transactions directly to public keys are also not protected). Since the method is based on a cryptographic hash of the public key, it even provides some protection against quantum-computing based attacks. I wonder what the exact motivation of the creators for using hashes was, but it sure is a nice trick! Unfortunately, bitcoinj currently sends all change to the original address, to which the key has already been revealed, which is why the attack worked in the first place. But there is a good reason to do this: Until we get deterministic address generation, ad-hoc creating addresses to transfer the change to makes wallet backups difficult and is prone to inadverted loss of private keys. But this is probably the topic of another blog post.</p><p>There are <a href="//blog.lxgr.net/posts/2013/08/15/android-securerandom-not-even-nonce/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

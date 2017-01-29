@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - software</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2015/04/30/grub-efi-multiboot/">Booting multiple Ubuntu versions with EFI</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2015-04-30T13:32:00+02:00">
+                Published: Thu 30 April 2015
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/software.html">software</a> </p>
+</footer><!-- /.post-info --><p>For an upcoming project, I will have to use Ubuntu 14.04, and since I didn't want to downgrade my main Ubuntu install on my laptop, I decided to install the second version on a spare partition of my primary harddisk. Sounds easy, right? That's what I thought too, and I was very wrong.</p>
+<p>I expected to be able to simply point the Ubuntu installer to the spare partition and wait for the automatic setup to complete, like I used to when I was using plain old BIOS and MBRs to boot my system. My current laptop, however, supports something called UEFI and Secure Boot, and since the "secure" part piqued my interest, I had decided to give it a try. I have been using this setup for dual-booting Ubuntu and Windows 8 for more than a year without any problems now.</p>
+<p>After watching the installer copy all the necessary files of Ubuntu 14.04 to the disk and installing the bootloader, I booted into the new system, and everything worked as expected so far – I saw the new, old 14.04 desktop and was even able to open my main, encrypted 15.04 partition using Nautilus. But when I wanted to boot back into my main system, I realized that something had gone wrong: My 15.04 install didn't show up anywhere in the boot process. Not in the EFI boot menu of my laptop I can access by pressing F12 during the boot process (I used that to boot the Windows, because somehow the secure boot stuff interfered with grub's chain loading), and also not in grub itself – it looked as if the installation had never existed in the first place (except for the fact that I was able to see all of its file in 14.04, of course).</p>
+<p>After the initial rush of panic had subsided, I was able to restore the system to its original state by the "usual" process of <a href="http://howtoubuntu.org/how-to-repair-restore-reinstall-grub-2-with-a-ubuntu-live-cd">mounting and chrooting</a> my previous system and executing <code>grub-install</code>. This worked, but now I was not able to boot into the new system anymore, besides executing all those steps again from within the old system. I realized I had to dig into the details of the Linux boot process on EFI (and secure boot) if I wanted to accomplish the triple-boot setup I had in mind. If you are unfamiliar with UEFI, I would recommend you to <a href="https://www.happyassassin.net/2014/01/25/uefi-boot-how-does-that-actually-work-then/">read an introduction</a> before reading the following paragraphs.</p>
+<p>The main problem seemed to be that the <code>grub-install</code> utility of both Ubuntu systems (which is also executed from the installer) wrote to the same location – I just didn't know what that location was. I started to dig into the details of the EFI boot process – from previous triple-boot experiments on a Mac I vaguely remembered something about a so-called "EFI system partition" where the initial boot loaders of all installed operating systems are stored, and also that there were some parts of the UEFI configuration that were stored in a non-volatile memory on the mainboard. This is very different from the "legacy" boot process, where the trusty BIOS simply loads a chunk of code stored in the MBR of some disk (which can be configured in the BIOS setup, but usually defaults to a sequence of CD-ROM/USB/primary HDD) and executes it. That process is both simple (it doesn't depend on any stable configuration storage within the PC) and robust (in my experience, it was possible to migrate to a new machine simply by swapping the hard drive!), but is also showing its age – things like a dual-boot setup of uncooperating operating systems quickly become a mess, as everybody who has ever installed Windows after Linux on the same machine probably knows. Additionally, there is no mechanism that allows checking the integrity of the system before it is booted, enabling malware that hooks itself into the boot process and is virtually undetectable by any software or operating system mechanism.</p>
+<p>UEFI solves the problem of multiple operating systems by specifying the "EFI system partition", which is basically just a plain old FAT partition with a special partition flag and a standardized folder structure where every operating system on the disk or even machine (more on that later) can store its initial bootloader as an executable file. This is a much more robust and future-proof way of storing the first-stage bootloader than the very limited MBR scheme that basically only allows a single primary bootloader which has to locate and execute all secondary boot loaders of all operating systems on the drive. However, it is unfortunately not enough (at least on my computer!) to just dump a bootloader in the correct location (which would have been a <em>really</em> nice EFI feature!) – the corresponding operating system also has to tell the EFI about the new bootloader (both the EFI disk's UUID it resides on and the path on that disk), which then stores that information in its non-volatile configuration memory (a.k.a. NVRAM).</p>
+<p>To sum the EFI boot process up, you need a folder on the EFI system partition containing your operating system's boot loader as an EFI binary (which in turn might be the first stage of a multi-stage boot loader that simply locates and executes its remaining parts) and a pointer (i.e. disk and path) to that file in the NVRAM. In the case of secure boot, the EFI binary will also be signed by some "trusted" entity, which could be your operating system vendor or amusingly Microsoft (even though you aren't actually using their operating system – this is because many hardware vendors opted to include their keys in their firmware, which was cause for much political discussion when secure boot was initially introduced).</p>
+<p>Fortunately, <code>grub-install</code> takes care about all of that automatically as long as all the correct flags are supplied to it – but unfortunately, in the case of Ubuntu and secure boot, this only works for a single installation per <em>machine</em> (i.e. <em>not</em> per disk, which kept me puzzling for hours!). I'm no expert on secure boot, but I think that this might not be easily fixable by Ubuntu, depending on how exactly the signature mechanism is implemented.</p>
+<p>When invoked with no parameters, Ubuntu's <code>grub-install</code>, on an EFI system, installs its signed bootloader to the EFI system partition that is mounted in <code>/boot/efi</code> (which might or might not be the one you want to use on a multi-disk setup!), in the folder <code>/EFI/ubuntu/</code>. The signed loader consists of a shim signed by Microsoft that subsequently executes the actual EFI loader called <code>grubx64.efi</code> in the same directory. Finally, there is a <code>grub.cfg</code> configuration file which contains a pointer (both as a disk UUID and as a GPT number) to the "regular" grub boot disk, which is usually your Linux root partition (or a separate boot partition if you are using an encrypted root device).</p>
+<p>Initially, the problem only seemed to be that both Ubuntu installs were trying to install their bootloader and configuration to the same EFI subdirectory – I thought that if I were to somehow convince <code>grub-install</code> to install the EFI loader to some other subdirectory of <code>/EFI</code>, I would be able to select the Ubuntu I wanted from the EFI boot screen. <code>grub-install</code> conveniently has an option for exactly that; you can either change the value of the <code>GRUB_DISTRIBUTOR</code> variable in <code>/etc/default/grub</code>, or directly supply it using the <code>--bootloader-id</code> parameter. When invoking <code>grub-install</code> this way, you can see that a new folder in <code>/EFI</code> will be created using the supplied name (and registered with the EFI NVRAM). Unfortunately, while I was able to boot from the newly created boot entry, I didn't seem to be able to change the disk that grub was booting from in any way. It took me hours to find out why.</p>
+<p>Remember that grub uses the value stored in <code>/EFI/&lt;loadername&gt;/grub.cfg</code> to determine the disk where it will continue loading. With a lot of trial-and-error experimentation, I was finally able to determine that regardless of which boot entry I was using in the EFI boot manager, grub would always read the same grub.cfg from <code>/EFI/ubuntu</code>, <strong>regardless of the actual bootloader location</strong> (i.e. subfolder of <code>/EFI</code>)! This location is actually hardcoded in the <code>grubx64.efi</code> binary, which can be verified by using <code>strings</code> or simply opening it with a hex editor. This means that regardless of the Ubuntu install from which <code>grub-install</code> was executed, only the system that <em>most recently</em> installed the loader in the <em>default location</em> <code>/EFI/ubuntu</code> was actually able to change the partition that grub would boot from. (I think I found out about that hard-coded string from some bug report, which I will try to find and reference here.)</p>
+<p>If the hard-coded string is modified to reflect the actual location of the boot entry in the <code>/EFI</code> directory everything works as expected (with secure boot enforcing disabled)! Now why would the Ubuntu team be so stupid to hard-code a string that obviously would better be supplied by a parameter? The answer is secure boot: If you enable signature enforcing in the EFI configuration, the modified bootloader stops working. It seems that the string within the binary is covered in the asymmetric signature Canonical uses to certify their bootloader; they could either modify it (and break all systems where secure boot is enforced) or leave it as it is (and break multi-booting). They seem to have decided on the latter. (Maybe there is also a third way, where the configuration file location could be encoded relative to the binary location, i.e. <code>./grub.cfg</code>, but I don't know enough about EFI to say whether such a thing is possible.)</p>
+<p>As I later realized, there is an easier way than modifying the signed grub binary. Since secure boot doesn't work with the modified loader anyway, I tried to invoke <code>grub-install</code> with the <code>--no-uefi-secure-boot</code> parameter and examined the resulting bootloader: Without secure boot, there is only a single EFI executable that is also called <code>grubx64.efi</code> (which confused me to no end, since the other files are <em>not</em> cleaned up by <code>grub-install</code>, and I assumed that the configuration file was still working), but that has a much simpler internal structure and importantly has the boot disk location hardcoded. This wasn't as easy to find as the suspicious <code>/EFI/ubuntu</code> string – it is only some kind of relative disk ID like <code>(,gpt2)</code>, if your boot partition is the second partition of the volume on which the EFI partition resides, but a complete disk UUID if the boot partition is located on a <em>different</em> disk.</p>
+<p>Finally, here is the complete guide on how to install two Ubuntu versions on a single disk:</p>
+<ul>
+<li>Disable secure boot in your EFI settings.</li>
+<li>Install the first Ubuntu system on the disk. (If it already exists and you have spare space on your disk, you can obviously skip this.)</li>
+<li>
+<p>Backup the boot entry of the first disk by reinstalling it from within the system using a different name, without secure boot:</p>
+<div class="highlight"><pre>grub-install --bootloader-id=myfirstubuntu --no-uefi-secure-boot
+</pre></div>
+
+
+</li>
+<li>
+<p>Install the second system using the regular Ubuntu installer where you want it. This will break the boot entry of the first system called <code>ubuntu</code>, but not the backup you just created.</p>
+</li>
+<li>Boot the second system and create a backup of the bootloader, e.g. <code>grub-install --bootloader-id=mysecondubuntu --no-uefi-secure-boot</code></li>
+<li>(only if you want to primarily boot the first system) Boot the first system using your computer's EFI boot menu and execute <code>grub-install</code> without any parameters.</li>
+</ul>
+<p>Congratulations, you now have <em>two</em> Ubuntus running on a single machine!</p>
+<p>If you want to use a similar setup, but using more than one disk, you can basically use the same steps if you don't mind that the same EFI partition of the first disk will be used for both systems, which means that you can never format or remove that disk without also disrupting the system on the other disk. grub will just put a pointer to the second disk in its binary that is executed from the EFI partition on the first disk, which should theoretically even survive partition and disk renumbering (but don't count on it!).</p>
+<p>If that is a problem for you, there is also the possibility of using a second EFI partition on the second disk, but the Ubuntu installer will make your life even harder by stubbornly insisting to use the EFI partition on the first disk; I was able to solve this only by creating a backup of the first system's bootloader as described above, installing the second system, mounting the second EFI partition in <code>/boot/efi</code> instead of the first one and rerunning <code>grub-install --bootloader-id=...</code>.</p>
+<p>You can verify if everything has been setup as you want it by examining the EFI directory on the EFI system partition(s) on your disk(s) as well as the output of <code>efibootmgr -v</code>, which lists the content of the boot list in the EFI NVRAM.</p>
+<p>There is also an option <code>--removable</code> which supposedly sets up the EFI directory on a removable device, which looks a bit different than for internal devices and importantly doesn't create an NVRAM entry (which wouldn't be available on different machines anyway). You might be able to use that to boot from an internal disk too, but I have not tried that approach, however.</p>
+<p>Of course, if that sounds like a lot of headache and your computer still supports the legacy BIOS boot process (a.k.a CSM in EFI parlance), you can just install the second system on a different disk with an MBR bootloader and configure your EFI for both CSM and EFI booting if it supports that; then you can just select the EFI entry of the first system or the second disk (which will start the second system's boot loader) in the EFI boot menu.</p>
+<p>Let me know if you actually made it through that big wall of text and were able to solve your EFI boot problems in the comments!</p>
+<h1>Update (2015-12-11):</h1>
+<p>There is an <a href="https://www.kubuntuforums.net/archive/index.php/t-68588.html">interesting discussion</a> about the whole topic in the Kubuntu forums. Apparently, it should also be possible to use multiple EFI partitions to get multiple instances of Ubuntu working with secure boot. Thanks for that idea, and sorry for being unreachable. I will probably have to add my mail address here sometime. In the meantime, you can try "me" at lxgr dot net.</p><p>There are <a href="//blog.lxgr.net/posts/2015/04/30/grub-efi-multiboot/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+                <section id="content" class="body">
+                    <h1>Other articles</h1>
+                    <hr />
+                    <ol id="posts-list" class="hfeed">
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2015/04/27/chrome-linux-vsync/" rel="bookmark"
+                           title="Permalink to How to fix video tearing on Chrome/Chromium and Compiz">How to fix video tearing on Chrome/Chromium and Compiz</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2015-04-27T18:27:00+02:00">
+                Published: Mon 27 April 2015
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/graphics.html">graphics</a> <a href="//blog.lxgr.net/tag/software.html">software</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> </p>
+</footer><!-- /.post-info -->                <p>One thing I really like about Netflix is their excellent device and browser support. Unlike a certain other streaming service (the one from the company also selling books and clouds), which wouldn't allow watching their streams using an Android tablet (bizarrely, smartphones were somehow allowed...?) and requires Flash and ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2015/04/27/chrome-linux-vsync/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2015/04/27/chrome-linux-vsync/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="//blog.lxgr.net/posts/2014/05/15/vim-tmux-startup-delay/" rel="bookmark"
+                           title="Permalink to vim and that weird one-second startup delay">vim and that weird one-second startup delay</a></h1>
+                </header>
+
+                <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2014-05-15T20:16:00+02:00">
+                Published: Thu 15 May 2014
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/software.html">software</a> </p>
+</footer><!-- /.post-info -->                <p>Are you using <code>vim</code>, <code>tmux</code>, a graphical Linux desktop and are you experiencing random sluggishness when starting your editor? If not, you can skip this one.</p>
+<p>This is something that had been bugging me for ages, first at work on my workstation, then at home: Long-running <code>tmux</code> sessions would sporadically ...</p>
+                <a class="readmore" href="//blog.lxgr.net/posts/2014/05/15/vim-tmux-startup-delay/">read more</a>
+<p>There are <a href="//blog.lxgr.net/posts/2014/05/15/vim-tmux-startup-delay/#disqus_thread">comments</a>.</p>                </div><!-- /.entry-content -->
+            </article></li>
+                </ol><!-- /#posts-list -->
+                </section><!-- /#content -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

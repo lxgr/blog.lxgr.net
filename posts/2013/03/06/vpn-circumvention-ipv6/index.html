@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>VPNs and IPv6</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/" rel="bookmark"
+           title="Permalink to VPNs and IPv6">VPNs and IPv6</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-03-06T10:31:00+01:00">
+                Published: Wed 06 March 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/vpn.html">vpn</a> <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->      <!--- Summary: Inadverted VPN circumvention by IPv6 -->
+
+<p>A while ago, I have configured a small OpenVPN for personal use (mostly for security when using public wireless networks) with <a href="http://openvpn.net/">OpenVPN</a>. The setup is pretty easy, thanks to a <a href="http://wiki.openvpn.eu/index.php/Konfiguration_eines_Internetgateways">very helpful tutorial (in German)</a> and the sensible default settings of OpenVPN itself. (Setting up the certificate infrastructure was a bit annoying, though – I would really prefer an SSH-like approach where the users can create a private key for themselves, and the VPN server has a list of the key/user mappings, but that's another story.)</p>
+<p>Configuring the server to push a default route to the clients is as simple as setting the <code>push redirect-gateway def1</code> option in the server configuration, and mostly, that works as expected.</p>
+<p>However, there is a huge caveat for IPv4-only clients. Since I don't have an IPv6 subnet big enough to provide IPv6 tunneling on my server as well (OpenVPN, or at least the version included in Ubuntu 12.04, seems to require a /64 subnet for now, but my provider only provides a tiny /112), I just didn't configure IPv6 and expected IPv6 connectivity to be broken. But that's not what's happening:</p>
+<p>When connecting to the VPN from a client that has both IPv4 and IPv6 connectivity, only the IPv4 traffic will be routed over the VPN gateway, <em>but the IPv6 traffic will be routed locally</em> – and since the <a href="http://www.worldipv6launch.org/">world IPv6 launch</a>, there are quite a lot of hosts that are reachable over IPv6 and serve AAAA records to all users. Except for TLS protected connections, traffic to them will be unencrypted, and even then, the connection metadata (IP addresses etc.) will be plainly visible to anybody on the public network.</p>
+<p>After thinking about that for a while, it kind of makes sense: At no point did I instruct OpenVPN to <em>break</em> my existing IPv6 connectivity, and since I didn't provide any IPv6 tunneling settings, my routes for that were just left alone. It can also be fixed easily enough – just configure a script that tears down IPv6 connectivity before connecting to the VPN, and restores it immediately after that. Maybe there is even a way to do that from the server via <code>push</code> instructions, but I've had no success with that so far.</p>
+<p>Curious about the issue, I decided to check how other VPN solutions and clients handle that situation, with pretty much the same results:</p>
+<p>Cisco's AnyConnect, when used with OpenConnect, behaves exactly like OpenVPN. The Android client, however, seems to specifically work around that problem – IPv6 connectivity breaks while connected to an IPv4-only VPN. I haven't been able to find out how that works, but I suspect that either some additional routes are pushed to the client, and the IPv6 traffic is discarded locally or at the gateway, or something is going on at the DNS level (since I get <code>NAME_NOT_RESOLVED</code> errors when visiting <em>what-is-my-IPv6</em>–like sites from the VPN).</p>
+<p>OpenVPN for Android behaves just like the Linux client. Unfortunately, unlike Linux, Android provides no way for the user or the VPN application developer to disable IPv6, which makes a workaround pretty much impossible. I've reported that as <a href="https://code.google.com/p/ics-openvpn/issues/detail?id=142">a bug</a> to the developer, even though it is a problem with android, not OpenVPN – maybe he'll figure out a solution. (I've also reported it as <a href="https://code.google.com/p/android/issues/detail?id=48417">an Android bug</a>, but I'm really not sure if there's anybody from Google watching that bug tracker...)</p>
+<p>I'm not really sure what would be the best solution to the problem: Should VPN clients just break IPv6 connectivity by default, to protect the data of users who will most likely be using a VPN under the assumption that it will be doing just that? Or should it leave IPv6 alone by default, just providing an option to automatically disable their IPv6 connectivity when needed? I'm in favor of the first approach, but as it is, even the second one would be a big step forward – on Android, users have <a href="https://code.google.com/p/android/issues/detail?id=32216"><em>no</em> way of disabling IPv6 traffic circumventing their VPN connection</a>, and most will not even know that it's happening.</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/03/06/vpn-circumvention-ipv6/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/03/06/vpn-circumvention-ipv6/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

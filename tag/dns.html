@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>lxgr's blog - dns</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+
+            <aside id="featured" class="body">
+                <article>
+                    <h1 class="entry-title"><a href="//blog.lxgr.net/posts/2013/11/18/nsswitch-ubuntu-slow-dns-lookups/">How to fix slow DNS lookups on Ubuntu</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2013-11-18T22:03:00+01:00">
+                Published: Mon 18 November 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> <a href="//blog.lxgr.net/tag/dns.html">dns</a> </p>
+</footer><!-- /.post-info --><p>If you're using a relatively recent version of Ubuntu, chances are that you have encountered spurious slowdowns that might be related to a very specific DNS failure. For me, it was the fact that <code>ping</code> to a host <em>without</em> a reverse DNS entry would only transmit a single ICMP request per second, even when a higher rate was specified via the <code>-i</code> option.</p>
+<p>I've traced the DNS requests that are performed by <code>ping</code> by default (the effect does not occur when using the <code>-n</code> option which disables host name lookup), and didn't notice anything out of the ordinary. The <code>NXDOMAIN</code> responses were occuring almost instantly, but nevertheless, it took precisely one second for this response to actually propagate to the <code>ping</code> process.</p>
+<p>To make a long story short: The reson for this is that Ubuntu (or more precisely, the Name Switching Service), will (by default) try to lookup DNS records not only via the regular DNS server configured via the network settings, but also using Zeroconf (a.k.a. Bonjour); a protocol that can be used to resolve hostnames locally by using multicast DNS requests and responses.</p>
+<p>This is not an issue for DNS queries that can be answered positively by your regular DNS server (those will always take precedence over records received via Zeroconf), but it can be a problem for negative DNS responses (<code>NXDOMAIN</code>): When the resolving library receives one of those, it will try a Zeroconf lookup, and this can take a while – especially for a host that does not exist.</p>
+<p>Since Zeroconf is only rarely used on Linux and is almost always limited to the <code>.local</code> top-level domain, this behavior seems useless at best, and can be pretty irritating.</p>
+<p>To fix it, you can simply disable the Zeroconf DNS lookups in the configuration file <a href="http://man7.org/linux/man-pages/man5/nsswitch.conf.5.html"><code>/etc/nsswitch.conf</code></a> by changing the line</p>
+<div class="highlight"><pre><span class="n">hosts</span><span class="o">:</span>          <span class="n">files</span> <span class="n">myhostname</span> <span class="n">mdns4_minimal</span> <span class="o">[</span><span class="n">NOTFOUND</span><span class="o">=</span><span class="k">return</span><span class="o">]</span> <span class="n">dns</span> <span class="n">mdns4</span>
+</pre></div>
+
+
+<p>to</p>
+<div class="highlight"><pre><span class="n">hosts</span><span class="o">:</span>          <span class="n">files</span> <span class="n">myhostname</span> <span class="n">mdns4_minimal</span> <span class="o">[</span><span class="n">NOTFOUND</span><span class="o">=</span><span class="k">return</span><span class="o">]</span> <span class="n">dns</span>
+</pre></div>
+
+
+<p>This doesn't entirely disable Zeroconf – it only restricts the lookups to the <code>.local</code> domain, which is almost always the only place where they are useful anyway.</p>
+<p>The effects should be immediately noticeable – just try to ping one of the previously slow to respond hosts and check if the ICMP requests are still limited to one per second.</p>
+<p>If you think that this should be the default configuration for Ubuntu, you are not alone – there <a href="https://bugs.launchpad.net/ubuntu/+source/nss-mdns/+bug/94940">is a bug report</a> on Ubuntu's bug tracker that describes the problem, but since it's been known since 2007, I wouldn't bet on the default changing anytime soon.</p><p>There are <a href="//blog.lxgr.net/posts/2013/11/18/nsswitch-ubuntu-slow-dns-lookups/#disqus_thread">comments</a>.</p>                </article>
+            </aside><!-- /#featured -->
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

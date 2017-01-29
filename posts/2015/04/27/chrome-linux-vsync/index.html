@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>How to fix video tearing on Chrome/Chromium and Compiz</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2015/04/27/chrome-linux-vsync/" rel="bookmark"
+           title="Permalink to How to fix video tearing on Chrome/Chromium and Compiz">How to fix video tearing on Chrome/Chromium and Compiz</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2015-04-27T18:27:00+02:00">
+                Published: Mon 27 April 2015
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/graphics.html">graphics</a> <a href="//blog.lxgr.net/tag/software.html">software</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> </p>
+</footer><!-- /.post-info -->      <p>One thing I really like about Netflix is their excellent device and browser support. Unlike a certain other streaming service (the one from the company also selling books and clouds), which wouldn't allow watching their streams using an Android tablet (bizarrely, smartphones were somehow allowed...?) and requires Flash and/or Silverlight in the browser, Netflix only requires a browser that supports the <a href="https://en.wikipedia.org/wiki/Media_Source_Extensions">HTML5 Media Source Extensions</a> (plain "old" HTML5 video tag support is not enough), the <a href="http://www.w3.org/TR/encrypted-media/">HTML5 DRM extensions</a> a.k.a. EME and one of the three supported DRM plugins (Microsoft's Playready, Apple's Fairplay, or Google's Widevine; used by and shipping with Windows/IE, Safari on OS X and Chrome, respectively). Of course, the DRM requirement is annoying (somehow, these things tend to be broken sooner rather than later and only make things inconvenient for legitimate customers), but it is much better than those horribly outdated and inefficient browser plugins.</p>
+<p>The only thing that was annoying me was a very annoying case of <a href="https://en.wikipedia.org/wiki/Screen_tearing">screen tearing</a> using Chrome in fullscreen on my laptop running Unity/Ubuntu. This was never an issue for me with other browsers (e.g. Firefox), video players or games, so I initially suspected a bug in Chromium and <a href="http://code.google.com/p/chromium/issues/detail?id=344141">filed a bug report</a>. Thanks to some <a href="https://code.google.com/p/chromium/issues/detail?id=344141#c20">very helpful comments</a> on that bug's discussion thread, I have been able to finally understand what is going on.</p>
+<p>However, as it turns out, the problem seems to be actually caused by Compiz (the default window manager of Unity on Ubuntu), or more specifically, its "unredirect output" feature for fullscreen applications. Compiz is a <a href="https://en.wikipedia.org/wiki/Compositing_window_manager">compositing window manager</a>, which means that applications do not draw directly to the framebuffer, but to a texture in video memory; the window manager then uses the GPU to display all windows on their respective positions. This is both more efficient (for example, dragging a window doesn't require all affected applications to redraw their content up to 60 times per second anymore) and visually pleasing (it prevents those <a href="https://msdn.microsoft.com/en-us/library/windows/desktop/ff684179%28v=vs.85%29.aspx">ugly broken windows</a> that appear when dragging a window over another window whose application is not responding to redraw calls anymore).</p>
+<p>Of course, while compositing all those windows/textures on the GPU is very efficient, it is still not free; especially when only a single full-screen application like a video player is being displayed, compositing is only a waste of resources. "Unredirect output" seems to allow such full-screen applications to again draw directly to the framebuffer (as opposed to a texture). However, some applications seem to have problems doing just that; they somehow get their timing wrong and draw their window contents at the wrong moments (i.e. not during the "vertical sync period" a.k.a. VSync), which leads to visual tearing.</p>
+<p>It turns out that Compiz (at least on my distribution, Ubuntu 14.10) already comes with a pre-populated list of applications that are excluded from unredirecting. That list explains why I was experiencing tearing in Chrome, but not in any other application: All video players and other applications I have tried are preloaded on that list – except Chrome or Chromium!</p>
+<div class="highlight"><pre>(any) &amp; !(class=Totem) &amp; !(class=MPlayer) &amp; !(class=Vlc) &amp; !(class=Plugin-container) &amp; !(class=Firefox)
+</pre></div>
+
+
+<p>Adding filter clauses for both Chrome and Chromium completely fixes the issue for me (the list can be accessed and modified in the "Composite" tab of the "CompizConfig Settings Manager", which should be available in your distribution if it ships with Compiz):</p>
+<div class="highlight"><pre>[...] &amp; !(class=^Google-chrome) &amp; !(class=Chromium)
+</pre></div>
+
+
+<p>This fix should solve the problem regardless of your graphics card manufacturer; if you are using an Intel GPU, you might also have luck with enabling the <a href="https://wiki.archlinux.org/index.php/Intel_graphics#Tear-free_video">TearFree</a> option of the video driver, which might or might not be more efficient and/or cause other problems with your graphics – I have decided to use the Compiz fix, since it aligns with the way all other applications already are drawing their fullscreen windows on my system.</p>
+<p>If you are experiencing the same problem, let me know if this fix helps in the comments!</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2015/04/27/chrome-linux-vsync/';
+        var disqus_url = '//blog.lxgr.net/posts/2015/04/27/chrome-linux-vsync/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

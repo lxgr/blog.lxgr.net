@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>Jumboframes on the Internet?</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/04/12/jumboframes-on-the-internet/" rel="bookmark"
+           title="Permalink to Jumboframes on the Internet?">Jumboframes on the Internet?</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-04-12T11:43:00+02:00">
+                Published: Fri 12 April 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/network.html">network</a> <a href="//blog.lxgr.net/tag/linux.html">linux</a> </p>
+</footer><!-- /.post-info -->      <p>Recently, I've been experimenting with Wireshark for my bachelor's thesis, monitoring the performance of TCP uploads from my notebook to my web server. A while ago, I had also swapped my router for a nicer model capable of gigabit ethernet and 5 GHz wifi (due to increasing congestion of the 2.4 GHz band in my apartment building), of course also running OpenWrt <a href="//blog.lxgr.net/posts/2013/01/28/my-openwrt-setup/">like the old one</a>.</p>
+<p>Soon after the switch, I noticed an oddity in the Wireshark captures: Some of the outgoing TCP segments were reported as having a length of more than 1500 bytes, which is the upper payload limit for Ethernet, and therefore also for most, if not all, residential Internet connections.</p>
+<p><img alt="Ethernet frames bigger than 1500 bytes" src="//blog.lxgr.net/images/wireshark_tcp_gso.png" /></p>
+<p>Since I didn't really expect the path between my notebook and my server to be capable of a MTU higher than 1500, the obvious explanation for this to work would be IP fragmentation occuring in my router, which would be very unfortunate to say the least.</p>
+<p>To figure out if that was really the case, I started tcpdump on the server, with the following interesting result:</p>
+<p><img alt="Ethernet frames containing TCP segments, as received by the server" src="//blog.lxgr.net/images/wireshark_tcp_normal.png" /></p>
+<p>No sign of IP fragmentation whatsoever; the packets were arriving as if sent with an MTU of 1500! This also matches both the MTU configured on my notebook and explains the pattern of ACKs received from the server – usually, every other segment should be ACKed by the recipient, but in this case, I was receiving much more than that.</p>
+<p>After a bit of googling, I found the explanation: <a href="http://en.wikipedia.org/wiki/Large_segment_offload">TCP segementation offload (TSO)</a>. This is (theoretically) a nice feature of some NICs that allow the operating system to delegate TCP segmentation and TCP and IP header generation to the network interface, relieving the CPU of those duties and possibly also increasing performance quite a bit. However, if there are bugs in the NIC firmware, this could lead to very obscure and hard to debug transmission errors, and it also makes debugging other network behavior more difficult, as I had experienced myself with my measurements.</p>
+<p>There is an easy way to disable TSO on Linux:</p>
+<div class="highlight"><pre>sudo ethtool -K eth0 tso off
+sudo ethtool -K eth0 gso off
+</pre></div>
+
+
+<p>GSO is a very similar technology, which can be used to offload some of the higher-layer networking tasks from the kernel to the network interface for protocols other than TCP. It also has to be disabled, because according to my tests, it happily takes over TSO's duties once disabled, also causing strage results in Wireshark.</p>
+<p>Apart from the confusion in my packet traces, I have yet to experience any side effects of TSO or GSO with my NIC (likely because of the driver which is commendably developed by the NIC vendor itself), and plan to leave them enabled while I'm not working with Wireshark.</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/04/12/jumboframes-on-the-internet/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/04/12/jumboframes-on-the-internet/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

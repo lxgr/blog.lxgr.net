@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>Safe deterministic (EC)DSA signatures are coming to OpenSSL</title>
+        <link rel="stylesheet" href="//blog.lxgr.net/theme/css/main.css" />
+        <link href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="lxgr's blog Atom Feed" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="//blog.lxgr.net/">lxgr's blog </a></h1>
+                <nav><ul>
+                    <li><a href="//blog.lxgr.net/pages/contact.html">Contact</a></li>
+                    <li class="active"><a href="//blog.lxgr.net/category/misc.html">misc</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="//blog.lxgr.net/posts/2013/08/30/deterministic-dsa-signatures-openssl/" rel="bookmark"
+           title="Permalink to Safe deterministic (EC)DSA signatures are coming to OpenSSL">Safe deterministic (EC)DSA signatures are coming to OpenSSL</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2013-08-30T00:37:00+02:00">
+                Published: Fri 30 August 2013
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="//blog.lxgr.net/author/lxgr.html">lxgr</a>
+        </address>
+<p>In <a href="//blog.lxgr.net/category/misc.html">misc</a>.</p>
+<p>tags: <a href="//blog.lxgr.net/tag/security.html">security</a> </p>
+</footer><!-- /.post-info -->      <p>By now, everybody involved in implementing algorithms using the DSA or the ECDSA signature schemes should <em>really</em> understand <a href="http://tools.ietf.org/html/rfc6979">the importance of a proper secret nonce</a> as one of the inputs for a signature.</p>
+<p>This is easy to get wrong, both because PRNGs <a href="http://www.debian.org/security/2008/dsa-1571">are</a> <a href="http://kakaroto.homelinux.net/2012/01/how-the-ecdsa-algorithm-works/">really</a>, <a href="http://jbp.io/2013/08/15/android-securerandom-guess/">really</a>, <a href="http://android-developers.blogspot.com/2013/08/some-securerandom-thoughts.html">really</a> <a href="http://armoredbarista.blogspot.com/2013/03/randomly-failed-weaknesses-in-java.html">hard</a> to get right, and because not everybody implementing/using (EC)DSA expected to be needing randomness just for <em>signing stuff</em> (as opposed to creating key pairs).</p>
+<p>Fortunately, there is a way out. <a href="http://crypto.stackexchange.com/users/452/poncho">Poncho on Stackexchange Crypto</a> has notified me about <a href="http://tools.ietf.org/html/rfc6979">an interesting RFC</a> in the comments on a <a href="http://crypto.stackexchange.com/a/9939/2538">nice answer</a> to a related question.</p>
+<p>The really clever idea is that there is another way to (probabilistically) ensure that a secret nonce is used for every signature than just using a PRNG and hoping for the best.</p>
+<p>Since reusing the same nonce for <em>the same message</em> signed by the same key will always give the same signature as an output (there are no other inputs to the signature algorithm), we just have to guarantee that the nonce is different and unpredictable for <em>different</em> messages.</p>
+<p>By using a hash of the message and the private key as the nonce, these conditions can be satisfied even without a proper PRNG. Even better, it's possible to hash them together with some random data to provide backwards compatibility to implementations that react badly to deterministic (EC)DSA signatures. (Maybe some regression tests might interpret the lack of randomness as a fatal design flaw.)</p>
+<p>An (informal) RFC is nice, but actual code is even nicer, so I'm very happy that <a href="http://git.openssl.org/gitweb/?p=openssl.git;a=commitdiff;h=190c615d4398cc6c8b61eb7881d7409314529a75">a patch</a> implementing this method and <em>making it the default</em> in OpenSSL has already been accepted to the development version.</p>
+<p>If you're interested in the details, there's <a href="https://www.imperialviolet.org/2013/06/15/suddendeathentropy.html">a blog post</a> by the author that has some more details.</p>
+<p>I'm really looking forward to this patch shipping in a lot of OpenSSL binaries, whether as a part of a distribution or embedded in some other software – there have been more than enough fatal PRNG(EC)DSA failures in the past for my liking.</p>
+    </div><!-- /.entry-content -->
+    <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_shortname = 'lxgrblog';
+        var disqus_identifier = 'posts/2013/08/30/deterministic-dsa-signatures-openssl/';
+        var disqus_url = '//blog.lxgr.net/posts/2013/08/30/deterministic-dsa-signatures-openssl/';
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//lxgrblog.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+      <noscript>Please enable JavaScript to view the comments.</noscript>
+    </div>
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="blogroll">
+                        <h2>blogroll</h2>
+                        <ul>
+                            <li><a href="http://docs.notmyidea.org/alexis/pelican/">Pelican</a></li>
+                        </ul>
+                </div><!-- /.blogroll -->
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+                            <li><a href="//blog.lxgr.net/feeds/all.atom.xml" type="application/atom+xml" rel="alternate">atom feed</a></li>
+
+                            <li><a href="http://twitter.com/imlxgr">twitter</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+<script type="text/javascript">
+    var disqus_shortname = 'lxgrblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>
